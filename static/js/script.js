@@ -163,12 +163,14 @@ function renderInvoicePreviewHtml(invoice) {
 
   return `
         <div class="invoice-header">
-            <div>
-                <img src="/static/images/logo.svg" alt="" class="invoice-logo" width="60" height="60">
-                <h2>Paul Banning</h2>
-                <p>48 Pellipar Close<br>
-                London N13 4AG<br>
-                07730 556097</p>
+            <div class="invoice-header-left">
+                <img src="/static/logo.png" alt="" class="invoice-logo" width="56" height="56">
+                <div class="invoice-from">
+                    <h2>Paul Banning</h2>
+                    <p>48 Pellipar Close<br>
+                    London N13 4AG<br>
+                    07730 556097</p>
+                </div>
             </div>
             <div class="text-end">
                 <h1>INVOICE</h1>
@@ -462,13 +464,15 @@ function printInvoice() {
         position: fixed;
         left: 0;
         top: 0;
-        width: 210mm;
-        height: 297mm;
-        padding: 20mm;
+        width: 100%;
+        max-width: 210mm;
+        height: auto;
+        min-height: 0;
+        padding: 0;
         margin: 0;
         background-color: white;
         z-index: 9999;
-        overflow: hidden;
+        overflow: visible;
     `;
 
   printContainer.appendChild(invoiceContent);

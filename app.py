@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, jsonify, send_file
+from flask import Flask, render_template, request, jsonify, send_file, url_for
 from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
 from werkzeug.middleware.proxy_fix import ProxyFix
@@ -342,8 +342,12 @@ def send_invoice_email(invoice_id):
         import resend
 
         resend.api_key = api_key
+        logo_url = request.url_root.rstrip("/") + url_for("static", filename="logo.png")
         html = render_template(
-            "email_invoice.html", invoice=invoice, message=message or None
+            "email_invoice.html",
+            invoice=invoice,
+            message=message or None,
+            logo_url=logo_url,
         )
         params = {
             "from": from_email,

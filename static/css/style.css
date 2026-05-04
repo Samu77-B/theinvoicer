@@ -331,6 +331,45 @@ body.app-body {
 /* Invoice preview + print                                                   */
 /* -------------------------------------------------------------------------- */
 
+.invoice-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  margin-bottom: 1rem;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #ddd;
+}
+
+.invoice-header-left {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  min-width: 0;
+}
+
+.invoice-from h2 {
+  margin: 0 0 6px 0;
+  font-size: 1.1rem;
+}
+
+.invoice-from p {
+  margin: 0;
+  font-size: 0.875rem;
+  line-height: 1.45;
+}
+
+.invoice-header h1 {
+  font-size: 1.35rem;
+  margin: 0 0 6px 0;
+  letter-spacing: 0.06em;
+}
+
+.invoice-header .text-end p {
+  margin: 0;
+  font-size: 0.875rem;
+}
+
 .invoice-details h4 {
     font-size: 16px;
     margin-bottom: 10px;
@@ -347,7 +386,7 @@ body.app-body {
 
 .invoice-items {
     width: 100%;
-    margin-bottom: 30mm;
+    margin-bottom: 1rem;
     border-collapse: collapse;
 }
 
@@ -370,7 +409,7 @@ body.app-body {
 }
 
 .invoice-terms {
-    margin-top: 30mm;
+    margin-top: 1rem;
     font-size: 14px;
 }
 
@@ -409,7 +448,7 @@ body.app-body {
 @media print {
     @page {
         size: A4;
-        margin: 0;
+        margin: 12mm;
     }
 
     body * {
@@ -425,10 +464,15 @@ body.app-body {
         position: absolute !important;
         left: 0 !important;
         top: 0 !important;
-        width: 210mm !important;
-        height: 297mm !important;
-        padding: 20mm !important;
+        width: 100% !important;
+        height: auto !important;
+        min-height: 0 !important;
+        max-width: none !important;
+        padding: 0 !important;
         margin: 0 !important;
+        box-sizing: border-box !important;
+        overflow: visible !important;
+        background: white !important;
     }
 
     /* Hide all other elements */
@@ -444,46 +488,69 @@ body.app-body {
         position: static !important;
     }
 
-    /* Ensure invoice content is visible and properly formatted */
     .invoice-preview {
         background-color: white !important;
         color: black !important;
         padding: 0 !important;
         margin: 0 !important;
         width: 100% !important;
-        height: 100% !important;
+        height: auto !important;
+        min-height: 0 !important;
+        box-shadow: none !important;
+        border-radius: 0 !important;
     }
 
     .invoice-preview * {
         color: black !important;
     }
 
-    /* Ensure table borders print correctly */
+    .invoice-preview .invoice-items {
+        margin-bottom: 0.75rem !important;
+    }
+
+    .invoice-preview .invoice-terms {
+        margin-top: 0.75rem !important;
+        page-break-inside: avoid;
+    }
+
+    .invoice-preview .invoice-items thead {
+        display: table-header-group;
+    }
+
+    /* Keep each line row intact; long invoices still span multiple pages */
+    .invoice-preview .invoice-items tbody tr {
+        break-inside: avoid;
+        page-break-inside: avoid;
+    }
+
     .invoice-preview table,
     .invoice-preview th,
     .invoice-preview td {
-        border-color: black !important;
+        border-color: #333 !important;
         -webkit-print-color-adjust: exact !important;
         print-color-adjust: exact !important;
     }
 }
 
-/* Add specific styles for the print container */
+/* Off-screen print wrapper (only while print dialog runs) */
 .print-container {
     background: white;
-    width: 210mm;
-    height: 297mm;
-    padding: 20mm;
+    width: 100%;
+    max-width: 210mm;
+    height: auto;
+    min-height: 0;
+    padding: 0;
     margin: 0 auto;
     box-sizing: border-box;
-    overflow: hidden;
+    overflow: visible;
 }
 
 .print-container .invoice-preview {
     margin: 0;
     padding: 0;
     width: 100%;
-    height: 100%;
+    height: auto;
+    min-height: 0;
 }
 
 /* Spacing adjustments */
@@ -633,9 +700,12 @@ body {
 }
 
 .invoice-logo {
-    max-width: 120px;
-    height: auto;
-    margin-bottom: 1rem;
+    width: 56px;
+    height: 56px;
+    object-fit: contain;
+    flex-shrink: 0;
+    margin: 0;
+    display: block;
 }
 
 /* Tables */
