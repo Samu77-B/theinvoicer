@@ -10,26 +10,44 @@ from dotenv import load_dotenv
 load_dotenv()
 
 basedir = os.path.abspath(os.path.dirname(__file__))
-data_root = os.environ.get("DATA_DIR", basedir).strip() or basedir
-instance_path = os.path.join(data_root, "instance")
-invoice_folder = os.path.join(data_root, "invoices")
-database_path = os.path.join(instance_path, "invoices.db")
+
+
+def _database_uri():
+    """Railway Postgres sets DATABASE_URL. Local dev uses SQLite if unset."""
+    url = (os.environ.get("DATABASE_URL") or "").strip()
+    if url:
+        if url.startswith("postgres://"):
+            url = "postgresql://" + url[len("postgres://") :]
+        return url
+    instance_path = os.path.join(basedir, "instance")
+    os.makedirs(instance_path, exist_ok=True)
+    db_path = os.path.join(instance_path, "invoices.db")
+    return "sqlite:///" + db_path.replace("\\", "/")
+
+
+# Optional: volume mount for generated PDFs only (DB is Postgres on Railway)
+_data_root = os.environ.get("DATA_DIR", basedir).strip() or basedir
+_invoice_folder = os.path.join(_data_root, "invoices")
 
 app = Flask(__name__)
 app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
 
-app.config.update(
-    SQLALCHEMY_DATABASE_URI="sqlite:///" + database_path.replace("\\", "/"),
+_engine_options = {}
+if (os.environ.get("DATABASE_URL") or "").strip():
+    _engine_options["pool_pre_ping"] = True
+
+_config = dict(
+    SQLALCHEMY_DATABASE_URI=_database_uri(),
     SQLALCHEMY_TRACK_MODIFICATIONS=False,
     SECRET_KEY=os.environ.get("SECRET_KEY", "dev-change-in-production"),
-    INVOICE_FOLDER=invoice_folder,
+    INVOICE_FOLDER=_invoice_folder,
 )
+if _engine_options:
+    _config["SQLALCHEMY_ENGINE_OPTIONS"] = _engine_options
+app.config.update(_config)
 app.debug = os.environ.get("FLASK_DEBUG", "").lower() in ("1", "true", "yes")
 
-if not os.path.exists(instance_path):
-    os.makedirs(instance_path)
-if not os.path.exists(app.config["INVOICE_FOLDER"]):
-    os.makedirs(app.config["INVOICE_FOLDER"])
+os.makedirs(app.config["INVOICE_FOLDER"], exist_ok=True)
 
 db = SQLAlchemy(app)
 migrate = Migrate(app, db)
@@ -295,6 +313,11 @@ def send_invoice_email(invoice_id):
         return jsonify({"success": False, "error": str(e)}), 500
 
     return jsonify({"success": True, "id": result.get("id") if isinstance(result, dict) else None})
+
+
+# Ensure tables exist (Railway runs gunicorn, not run.py — create_all is idempotent)
+with app.app_context():
+    db.create_all()
 
 
 if __name__ == "__main__":
