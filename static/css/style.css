@@ -1,29 +1,4 @@
-.invoice-logo {
-    width: 60px;
-    height: 60px;
-    margin-bottom: 1rem;
-}
-
-.invoice-preview {
-    width: 210mm;  /* A4 width */
-    min-height: 297mm;  /* A4 height */
-    padding: 20mm;  /* Standard printer margins */
-    margin: 0 auto;
-    background: white;
-    box-sizing: border-box;
-}
-
-.invoice-preview p {
-    margin-bottom: 0.25rem;
-    font-size: 11pt;  /* Standard document font size */
-    line-height: 1.2;
-}
-
-.invoice-preview table {
-    font-size: 11pt;
-    width: 100%;
-    margin: 15mm 0;
-}
+/* Apple-style UI + responsive invoice preview (complete) */
 
 .invoice-preview h4 {
     font-size: 14pt;

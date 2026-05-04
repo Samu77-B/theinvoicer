@@ -83,16 +83,16 @@ async function saveClient() {
 function addInvoiceItem() {
   const container = document.getElementById('invoiceItems');
   const newItem = document.createElement('div');
-  newItem.className = 'invoice-item row mb-2';
+  newItem.className = 'line-item-row';
   newItem.innerHTML = `
-        <div class="col-8">
-            <input type="text" class="form-control" name="description[]" required>
+        <div class="line-item-desc">
+          <input type="text" class="form-control" name="description[]" placeholder="Description" required>
         </div>
-        <div class="col-3">
-            <input type="number" step="0.01" class="form-control" name="amount[]" required>
+        <div class="line-item-amt">
+          <input type="number" step="0.01" class="form-control" name="amount[]" placeholder="0.00" required>
         </div>
-        <div class="col-1">
-            <button type="button" class="btn btn-outline-danger btn-sm" onclick="this.parentElement.parentElement.remove()">×</button>
+        <div class="line-item-rm">
+          <button type="button" class="btn-remove-line" aria-label="Remove line" onclick="this.parentElement.parentElement.remove()">×</button>
         </div>
     `;
   container.appendChild(newItem);
@@ -263,16 +263,16 @@ async function openEditInvoice(invoiceId) {
 function addEditInvoiceItem(item = null) {
   const container = document.getElementById('editInvoiceItems');
   const newItem = document.createElement('div');
-  newItem.className = 'invoice-item row mb-2';
+  newItem.className = 'line-item-row';
   newItem.innerHTML = `
-        <div class="col-8">
-            <input type="text" class="form-control" name="description[]" required>
+        <div class="line-item-desc">
+          <input type="text" class="form-control" name="description[]" placeholder="Description" required>
         </div>
-        <div class="col-3">
-            <input type="number" step="0.01" class="form-control" name="amount[]" required>
+        <div class="line-item-amt">
+          <input type="number" step="0.01" class="form-control" name="amount[]" placeholder="0.00" required>
         </div>
-        <div class="col-1">
-            <button type="button" class="btn btn-outline-danger btn-sm" onclick="this.parentElement.parentElement.remove()">×</button>
+        <div class="line-item-rm">
+          <button type="button" class="btn-remove-line" aria-label="Remove line" onclick="this.parentElement.parentElement.remove()">×</button>
         </div>
     `;
   const descInput = newItem.querySelector('input[name="description[]"]');
@@ -339,31 +339,31 @@ async function loadInvoices() {
     list.innerHTML = '';
 
     if (invoices.length === 0) {
-      list.innerHTML = '<div class="list-group-item text-muted">No invoices yet.</div>';
+      list.innerHTML = '<div class="empty-state">No invoices yet. Create a client, then make your first invoice.</div>';
       return;
     }
 
     invoices.forEach((invoice) => {
       const item = document.createElement('div');
-      item.className = 'list-group-item d-flex justify-content-between align-items-center flex-wrap gap-2';
+      item.className = 'invoice-card';
       item.innerHTML = `
-                <div>
-                    <h5 class="mb-1">${escapeHtml(invoice.invoice_number)} — ${escapeHtml(invoice.client.name)}</h5>
-                    <small class="text-muted">Date: ${escapeHtml(formatUkDate(invoice.date))}</small>
-                    <div>Amount: £${Number(invoice.total_amount).toFixed(2)}</div>
+                <div class="invoice-card-main">
+                    <p class="invoice-card-title">${escapeHtml(invoice.invoice_number)} — ${escapeHtml(invoice.client.name)}</p>
+                    <p class="invoice-card-meta">Date: ${escapeHtml(formatUkDate(invoice.date))}</p>
+                    <p class="invoice-card-amount">£${Number(invoice.total_amount).toFixed(2)}</p>
                 </div>
-                <div class="btn-group">
-                    <button type="button" class="btn btn-sm btn-outline-primary" title="Preview" aria-label="Preview" onclick="openInvoicePreview(${invoice.id})">
+                <div class="invoice-card-actions">
+                    <button type="button" class="btn-apple-icon" title="Preview" aria-label="Preview" onclick="openInvoicePreview(${invoice.id})">
                         <i class="fas fa-eye"></i>
                     </button>
-                    <button type="button" class="btn btn-sm btn-outline-secondary" title="Edit" aria-label="Edit" onclick="openEditInvoice(${invoice.id})">
+                    <button type="button" class="btn-apple-icon" title="Edit" aria-label="Edit" onclick="openEditInvoice(${invoice.id})">
                         <i class="fas fa-pen"></i>
                     </button>
-                    <button type="button" class="btn btn-sm btn-outline-${invoice.paid ? 'success' : 'warning'}" title="Toggle paid"
+                    <button type="button" class="btn-apple-icon ${invoice.paid ? 'is-paid' : 'is-unpaid'}" title="Toggle paid" aria-label="Toggle paid"
                             onclick="togglePaidStatus(${invoice.id}, ${!invoice.paid})">
                         <i class="fas fa-${invoice.paid ? 'check' : 'clock'}"></i>
                     </button>
-                    <button type="button" class="btn btn-sm btn-outline-danger" title="Delete" aria-label="Delete" onclick="deleteInvoice(${invoice.id})">
+                    <button type="button" class="btn-apple-icon is-danger" title="Delete" aria-label="Delete" onclick="deleteInvoice(${invoice.id})">
                         <i class="fas fa-trash"></i>
                     </button>
                 </div>
@@ -453,7 +453,7 @@ function savePDF() {
 
 function showSuccess(message) {
   const alertDiv = document.createElement('div');
-  alertDiv.className = 'alert alert-success alert-dismissible fade show position-fixed top-0 end-0 m-3';
+  alertDiv.className = 'alert app-toast alert-success alert-dismissible fade show position-fixed top-0 end-0 m-3';
   alertDiv.style.zIndex = '11000';
   alertDiv.innerHTML = `
         ${escapeHtml(message)}
@@ -465,7 +465,7 @@ function showSuccess(message) {
 
 function showError(message) {
   const alertDiv = document.createElement('div');
-  alertDiv.className = 'alert alert-danger alert-dismissible fade show position-fixed top-0 end-0 m-3';
+  alertDiv.className = 'alert app-toast alert-danger alert-dismissible fade show position-fixed top-0 end-0 m-3';
   alertDiv.style.zIndex = '11000';
   alertDiv.innerHTML = `
         ${escapeHtml(message)}
