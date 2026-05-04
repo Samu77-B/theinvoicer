@@ -40,7 +40,7 @@
   </main>
 
   <!-- New client -->
-  <div class="modal fade" id="newClientModal" tabindex="-1" aria-labelledby="newClientModalLabel" aria-hidden="true">
+  <div class="modal fade" id="newClientModal" tabindex="-1" aria-labelledby="newClientModalLabel">
     <div class="modal-dialog">
       <div class="modal-content">
         <div class="modal-header">
@@ -48,7 +48,7 @@
           <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
         </div>
         <div class="modal-body">
-          <form id="clientForm">
+          <form id="clientForm" onsubmit="event.preventDefault(); saveClient();">
             <div class="mb-3">
               <label class="form-label" for="clientName">Name</label>
               <input type="text" class="form-control" id="clientName" name="name" required>
@@ -61,6 +61,7 @@
               <label class="form-label" for="clientAddress">Address</label>
               <textarea class="form-control" id="clientAddress" name="address" rows="2" placeholder="Street, city, postcode"></textarea>
             </div>
+            <button type="submit" class="visually-hidden">Submit</button>
           </form>
         </div>
         <div class="modal-footer">
@@ -72,7 +73,7 @@
   </div>
 
   <!-- New invoice -->
-  <div class="modal fade" id="newInvoiceModal" tabindex="-1" aria-labelledby="newInvoiceModalLabel" aria-hidden="true">
+  <div class="modal fade" id="newInvoiceModal" tabindex="-1" aria-labelledby="newInvoiceModalLabel">
     <div class="modal-dialog modal-lg modal-fullscreen-sm-down">
       <div class="modal-content">
         <div class="modal-header">
@@ -80,10 +81,10 @@
           <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
         </div>
         <div class="modal-body">
-          <form id="invoiceForm">
+          <form id="invoiceForm" onsubmit="event.preventDefault(); saveInvoice();">
             <div class="mb-3">
-              <label class="form-label">Client</label>
-              <select class="form-select" name="client_id" required>
+              <label class="form-label" for="invoiceClient">Client</label>
+              <select class="form-select" id="invoiceClient" name="client_id" required title="Client">
                 <option value="">Select a client…</option>
               </select>
             </div>
@@ -93,6 +94,7 @@
               <i class="fas fa-plus"></i>
               <span>Add line</span>
             </button>
+            <button type="submit" class="visually-hidden">Submit</button>
           </form>
         </div>
         <div class="modal-footer">
@@ -104,7 +106,7 @@
   </div>
 
   <!-- Invoice preview -->
-  <div class="modal fade" id="invoicePreviewModal" tabindex="-1" aria-labelledby="invoicePreviewModalLabel" aria-hidden="true">
+  <div class="modal fade" id="invoicePreviewModal" tabindex="-1" aria-labelledby="invoicePreviewModalLabel">
     <div class="modal-dialog modal-xl modal-dialog-scrollable modal-fullscreen-md-down">
       <div class="modal-content">
         <div class="modal-header">
@@ -133,7 +135,7 @@
   </div>
 
   <!-- Edit invoice -->
-  <div class="modal fade" id="editInvoiceModal" tabindex="-1" aria-labelledby="editInvoiceModalLabel" aria-hidden="true">
+  <div class="modal fade" id="editInvoiceModal" tabindex="-1" aria-labelledby="editInvoiceModalLabel">
     <div class="modal-dialog modal-lg modal-fullscreen-sm-down">
       <div class="modal-content">
         <div class="modal-header">
@@ -141,16 +143,16 @@
           <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
         </div>
         <div class="modal-body">
-          <form id="editInvoiceForm">
+          <form id="editInvoiceForm" onsubmit="event.preventDefault(); updateInvoice();">
             <input type="hidden" name="invoice_id">
             <div class="row mb-3">
               <div class="col-md-6">
                 <label class="form-label">Invoice #</label>
-                <input type="text" class="form-control" name="invoice_number" readonly>
+                <input type="text" class="form-control" name="invoice_number" readonly title="Invoice number">
               </div>
               <div class="col-md-6">
                 <label class="form-label">Client</label>
-                <input type="text" class="form-control" name="client_name" readonly>
+                <input type="text" class="form-control" name="client_name" readonly title="Client">
               </div>
             </div>
             <div id="editInvoiceItems"></div>
@@ -158,6 +160,7 @@
               <i class="fas fa-plus"></i>
               <span>Add line</span>
             </button>
+            <button type="submit" class="visually-hidden">Submit</button>
           </form>
         </div>
         <div class="modal-footer">
