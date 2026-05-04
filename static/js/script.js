@@ -329,6 +329,23 @@ async function deleteInvoice(invoiceId) {
   }
 }
 
+async function duplicateInvoice(invoiceId) {
+  try {
+    const response = await fetch(`/api/invoices/${invoiceId}/duplicate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(data.error || 'Failed to duplicate invoice');
+    }
+    showSuccess(`Duplicated as ${data.invoice_number}`);
+    loadInvoices();
+  } catch (error) {
+    showError(error.message || 'Failed to duplicate invoice');
+  }
+}
+
 async function loadInvoices() {
   try {
     const response = await fetch('/api/invoices');
@@ -358,6 +375,9 @@ async function loadInvoices() {
                     </button>
                     <button type="button" class="btn-apple-icon" title="Edit" aria-label="Edit" onclick="openEditInvoice(${invoice.id})">
                         <i class="fas fa-pen"></i>
+                    </button>
+                    <button type="button" class="btn-apple-icon" title="Duplicate" aria-label="Duplicate" onclick="duplicateInvoice(${invoice.id})">
+                        <i class="fas fa-copy"></i>
                     </button>
                     <button type="button" class="btn-apple-icon ${invoice.paid ? 'is-paid' : 'is-unpaid'}" title="Toggle paid" aria-label="Toggle paid"
                             onclick="togglePaidStatus(${invoice.id}, ${!invoice.paid})">

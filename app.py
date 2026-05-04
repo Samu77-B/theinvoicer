@@ -315,6 +315,43 @@ def send_invoice_email(invoice_id):
     return jsonify({"success": True, "id": result.get("id") if isinstance(result, dict) else None})
 
 
+@app.route("/api/invoices/<int:invoice_id>/duplicate", methods=["POST"])
+def duplicate_invoice(invoice_id):
+    invoice = db.session.get(Invoice, invoice_id)
+    if not invoice:
+        return jsonify({"success": False, "error": "Invoice not found"}), 404
+
+    client = invoice.client
+    if not client:
+        return jsonify({"success": False, "error": "Client not found"}), 404
+
+    new_invoice = Invoice(
+        invoice_number=generate_invoice_number(client.name),
+        client_id=client.id,
+        date=datetime.utcnow(),
+        paid=False,
+    )
+
+    total_amount = 0.0
+    for item in invoice.items:
+        new_item = InvoiceItem(description=item.description, amount=float(item.amount))
+        total_amount += new_item.amount
+        new_invoice.items.append(new_item)
+
+    new_invoice.total_amount = total_amount
+    db.session.add(new_invoice)
+    db.session.commit()
+
+    return jsonify(
+        {
+            "success": True,
+            "id": new_invoice.id,
+            "invoice_number": new_invoice.invoice_number,
+            "client_name": client.name,
+        }
+    )
+
+
 # Ensure tables exist (Railway runs gunicorn, not run.py — create_all is idempotent)
 with app.app_context():
     db.create_all()
