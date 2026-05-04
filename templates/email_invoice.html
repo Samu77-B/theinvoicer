@@ -17,6 +17,7 @@
     .total td { font-weight: bold; }
     .footer { margin-top: 28px; padding-top: 16px; border-top: 1px solid #e5e5e5; font-size: 13px; }
     .muted { color: #555; }
+    .note { margin: 0 0 20px 0; padding: 12px 14px; background: #f7f7f7; border: 1px solid #e5e5e5; border-radius: 8px; white-space: pre-wrap; }
   </style>
 </head>
 <body>
@@ -31,6 +32,10 @@
       <strong>Date:</strong> {{ invoice.date.strftime('%d/%m/%Y') }}</p>
     </div>
   </div>
+
+  {% if message %}
+  <p class="note">{{ message }}</p>
+  {% endif %}
 
   <p><strong>Bill To</strong></p>
   <p>{{ invoice.client.name }}<br>

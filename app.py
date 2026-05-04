@@ -333,11 +333,18 @@ def send_invoice_email(invoice_id):
     if not (client.email or "").strip():
         return jsonify({"success": False, "error": "Client has no email address"}), 400
 
+    data = request.get_json(silent=True) or {}
+    message = (data.get("message") or "").strip()
+    if len(message) > 4000:
+        message = message[:4000]
+
     try:
         import resend
 
         resend.api_key = api_key
-        html = render_template("email_invoice.html", invoice=invoice)
+        html = render_template(
+            "email_invoice.html", invoice=invoice, message=message or None
+        )
         params = {
             "from": from_email,
             "to": [client.email.strip()],

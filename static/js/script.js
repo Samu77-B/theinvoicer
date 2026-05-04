@@ -217,6 +217,9 @@ async function openInvoicePreview(invoiceId) {
     const invoice = await response.json();
     previewInvoiceId = invoice.id;
 
+    const msg = document.getElementById('emailMessage');
+    if (msg) msg.value = '';
+
     const preview = document.getElementById('invoicePreview');
     preview.className = 'invoice-preview';
     preview.innerHTML = renderInvoicePreviewHtml(invoice);
@@ -429,9 +432,12 @@ async function sendInvoiceEmail() {
     btn.disabled = true;
   }
   try {
+    const msgEl = document.getElementById('emailMessage');
+    const message = (msgEl?.value || '').trim();
     const response = await fetch(`/api/invoices/${previewInvoiceId}/send`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message }),
     });
     const data = await response.json().catch(() => ({}));
     if (!response.ok) {
