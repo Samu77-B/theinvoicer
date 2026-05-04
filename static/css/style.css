@@ -1,0 +1,451 @@
+.invoice-logo {
+    width: 60px;
+    height: 60px;
+    margin-bottom: 1rem;
+}
+
+.invoice-preview {
+    width: 210mm;  /* A4 width */
+    min-height: 297mm;  /* A4 height */
+    padding: 20mm;  /* Standard printer margins */
+    margin: 0 auto;
+    background: white;
+    box-sizing: border-box;
+}
+
+.invoice-preview p {
+    margin-bottom: 0.25rem;
+    font-size: 11pt;  /* Standard document font size */
+    line-height: 1.2;
+}
+
+.invoice-preview table {
+    font-size: 11pt;
+    width: 100%;
+    margin: 15mm 0;
+}
+
+.invoice-preview h4 {
+    font-size: 14pt;
+    margin: 5mm 0;
+}
+
+.invoice-preview h5 {
+    font-size: 12pt;
+    margin: 3mm 0;
+}
+
+.invoice-header {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 40mm;
+    padding-bottom: 10mm;
+    border-bottom: 1px solid #eee;
+}
+
+.invoice-header h2 {
+    font-size: 24px;
+    margin: 15px 0 10px 0;
+}
+
+.invoice-header p {
+    margin: 0;
+    line-height: 1.5;
+}
+
+.invoice-header .text-end h1 {
+    font-size: 28px;
+    margin-bottom: 15px;
+}
+
+.invoice-details {
+    margin-bottom: 20mm;
+}
+
+.invoice-details h4 {
+    font-size: 16px;
+    margin-bottom: 10px;
+}
+
+.invoice-details p {
+    margin: 0;
+    line-height: 1.5;
+}
+
+.invoice-items {
+    width: 100%;
+    margin-bottom: 30mm;
+    border-collapse: collapse;
+}
+
+.invoice-items th,
+.invoice-items td {
+    padding: 8px;
+    text-align: left;
+    border: 1px solid #ddd;
+}
+
+.invoice-items th {
+    background-color: #f8f9fa;
+}
+
+.invoice-total {
+    text-align: right;
+    font-weight: bold;
+    margin-top: 10mm;
+    font-size: 16px;
+}
+
+.invoice-terms {
+    margin-top: 30mm;
+    font-size: 14px;
+}
+
+.invoice-terms h5 {
+    font-size: 16px;
+    margin-bottom: 5px;
+}
+
+.invoice-terms p {
+    margin: 0 0 15px 0;
+    line-height: 1.5;
+}
+
+.invoice-item {
+    position: relative;
+}
+
+.invoice-item .btn-outline-danger {
+    padding: 0.25rem 0.5rem;
+    line-height: 1;
+}
+
+#editInvoiceModal .modal-lg {
+    max-width: 800px;
+}
+
+#editInvoiceModal .form-control {
+    font-size: 0.9rem;
+}
+
+#editInvoiceModal .btn-sm {
+    padding: 0.25rem 0.5rem;
+    font-size: 0.875rem;
+}
+
+@media print {
+    @page {
+        size: A4;
+        margin: 0;
+    }
+
+    body * {
+        visibility: hidden;
+    }
+
+    .print-container,
+    .print-container * {
+        visibility: visible !important;
+    }
+
+    .print-container {
+        position: absolute !important;
+        left: 0 !important;
+        top: 0 !important;
+        width: 210mm !important;
+        height: 297mm !important;
+        padding: 20mm !important;
+        margin: 0 !important;
+    }
+
+    /* Hide all other elements */
+    .modal,
+    .modal-dialog,
+    .modal-content,
+    .container,
+    .row,
+    .col {
+        padding: 0 !important;
+        margin: 0 !important;
+        border: none !important;
+        position: static !important;
+    }
+
+    /* Ensure invoice content is visible and properly formatted */
+    .invoice-preview {
+        background-color: white !important;
+        color: black !important;
+        padding: 0 !important;
+        margin: 0 !important;
+        width: 100% !important;
+        height: 100% !important;
+    }
+
+    .invoice-preview * {
+        color: black !important;
+    }
+
+    /* Ensure table borders print correctly */
+    .invoice-preview table,
+    .invoice-preview th,
+    .invoice-preview td {
+        border-color: black !important;
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+    }
+}
+
+/* Add specific styles for the print container */
+.print-container {
+    background: white;
+    width: 210mm;
+    height: 297mm;
+    padding: 20mm;
+    margin: 0 auto;
+    box-sizing: border-box;
+    overflow: hidden;
+}
+
+.print-container .invoice-preview {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    height: 100%;
+}
+
+/* Spacing adjustments */
+.sender-details {
+    margin-bottom: 10mm;
+}
+
+.client-details {
+    margin-bottom: 10mm;
+}
+
+.table th, .table td {
+    padding: 2mm 3mm;
+}
+
+/* Remove unnecessary margins in print */
+.container {
+    padding: 0;
+    margin: 0;
+    max-width: none;
+}
+
+.row {
+    margin: 0;
+}
+
+.col, .col-6, .col-12 {
+    padding: 0;
+}
+
+:root {
+    --primary-color: #ff6600;
+    --bg-dark: #1a1a1a;
+    --bg-darker: #121212;
+    --bg-light: #2a2a2a;
+    --text-primary: #ffffff;
+    --text-secondary: #b3b3b3;
+    --border-color: #333333;
+}
+
+body {
+    background-color: var(--bg-dark);
+    color: var(--text-primary);
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+}
+
+/* Cards and Containers */
+.card {
+    background-color: var(--bg-darker);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+.card-header {
+    background-color: var(--bg-dark);
+    border-bottom: 1px solid var(--border-color);
+    padding: 1rem 1.5rem;
+}
+
+.card-body {
+    padding: 1.5rem;
+}
+
+/* Buttons */
+.btn-primary {
+    background-color: var(--primary-color);
+    border-color: var(--primary-color);
+    color: white;
+    border-radius: 6px;
+    padding: 0.5rem 1rem;
+    transition: all 0.3s ease;
+}
+
+.btn-primary:hover {
+    background-color: #ff8533;
+    border-color: #ff8533;
+    transform: translateY(-1px);
+}
+
+.btn-outline-primary {
+    color: var(--primary-color);
+    border-color: var(--primary-color);
+}
+
+.btn-outline-primary:hover {
+    background-color: var(--primary-color);
+    border-color: var(--primary-color);
+    color: white;
+}
+
+/* Form Controls */
+.form-control, .form-select {
+    background-color: var(--bg-dark);
+    border: 1px solid var(--border-color);
+    color: var(--text-primary);
+    border-radius: 6px;
+    transition: all 0.3s ease;
+}
+
+.form-control:focus, .form-select:focus {
+    background-color: var(--bg-dark);
+    border-color: var(--primary-color);
+    color: var(--text-primary);
+    box-shadow: 0 0 0 0.2rem rgba(255, 102, 0, 0.25);
+}
+
+/* List Group */
+.list-group-item {
+    background-color: var(--bg-darker);
+    border: 1px solid var(--border-color);
+    color: var(--text-primary);
+    margin-bottom: 0.5rem;
+    border-radius: 6px !important;
+    transition: all 0.3s ease;
+}
+
+.list-group-item:hover {
+    background-color: var(--bg-light);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+/* Modals */
+.modal-content {
+    background-color: var(--bg-darker);
+    border: 1px solid var(--border-color);
+}
+
+.modal-header {
+    border-bottom: 1px solid var(--border-color);
+    background-color: var(--bg-dark);
+}
+
+.modal-footer {
+    border-top: 1px solid var(--border-color);
+    background-color: var(--bg-dark);
+}
+
+/* Invoice Preview */
+.invoice-preview {
+    background-color: white;
+    color: #333;
+    padding: 2rem;
+    border-radius: 8px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+.invoice-logo {
+    max-width: 120px;
+    height: auto;
+    margin-bottom: 1rem;
+}
+
+/* Tables */
+.table {
+    color: var(--text-primary);
+}
+
+.table thead th {
+    border-bottom: 2px solid var(--border-color);
+    color: var(--text-secondary);
+}
+
+.table td, .table th {
+    border-color: var(--border-color);
+}
+
+/* Alerts */
+.alert {
+    border-radius: 8px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+.alert-success {
+    background-color: rgba(40, 167, 69, 0.2);
+    border-color: #28a745;
+    color: #98e6aa;
+}
+
+.alert-danger {
+    background-color: rgba(220, 53, 69, 0.2);
+    border-color: #dc3545;
+    color: #f5c6cb;
+}
+
+/* Custom Styles */
+.display-4 {
+    color: var(--text-primary);
+    font-weight: 600;
+}
+
+.btn-group .btn {
+    border-radius: 6px;
+    margin: 0 2px;
+}
+
+.invoice-item {
+    background-color: var(--bg-darker);
+    padding: 1rem;
+    border-radius: 6px;
+    margin-bottom: 0.5rem;
+}
+
+/* Animations */
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.alert {
+    animation: fadeIn 0.3s ease-out;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+::-webkit-scrollbar-track {
+    background: var(--bg-darker);
+}
+
+::-webkit-scrollbar-thumb {
+    background: var(--border-color);
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: var(--primary-color);
+}

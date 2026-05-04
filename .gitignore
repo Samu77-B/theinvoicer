@@ -1,0 +1,12 @@
+.env
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*.db
+instance/
+invoices/
+.pytest_cache/
+.mypy_cache/
+.DS_Store
+*.log

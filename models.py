@@ -1,0 +1,3 @@
+class Invoice(db.Model):
+    # ... existing fields ...
+    paid = db.Column(db.Boolean, default=False) 
