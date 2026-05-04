@@ -4,15 +4,18 @@
 */
 
 :root {
-  --bg: #f5f5f7;
-  --card: #ffffff;
-  --muted: #6e6e73;
-  --text: #1d1d1f;
-  --border: rgba(0, 0, 0, 0.08);
-  --shadow: 0 10px 30px rgba(0, 0, 0, 0.06);
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
-  --accent: #0071e3;
-  --accent-hover: #0077ed;
+  --bg: #0b0f0d;
+  --card: #111816;
+  --card-2: #0f1513;
+  --muted: rgba(226, 232, 240, 0.72);
+  --text: rgba(248, 250, 252, 0.92);
+  --border: rgba(148, 163, 184, 0.16);
+  --border-2: rgba(148, 163, 184, 0.22);
+  --shadow: 0 18px 60px rgba(0, 0, 0, 0.55);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.45);
+  --accent: #10b981; /* emerald */
+  --accent-hover: #34d399;
+  --danger: #fb7185;
   --radius: 16px;
   --radius-sm: 12px;
   --touch: 44px;
@@ -38,7 +41,7 @@ body.app-body {
   position: sticky;
   top: 0;
   z-index: 1000;
-  background: rgba(245, 245, 247, 0.78);
+  background: rgba(11, 15, 13, 0.72);
   -webkit-backdrop-filter: saturate(180%) blur(18px);
   backdrop-filter: saturate(180%) blur(18px);
   border-bottom: 1px solid var(--border);
@@ -98,7 +101,7 @@ body.app-body {
   padding: 0 14px;
   border-radius: 999px;
   border: 1px solid var(--border);
-  background: rgba(255, 255, 255, 0.7);
+  background: rgba(255, 255, 255, 0.06);
   color: var(--text);
   display: inline-flex;
   align-items: center;
@@ -110,8 +113,8 @@ body.app-body {
 }
 
 .btn-apple:hover {
-  background: rgba(255, 255, 255, 0.95);
-  border-color: rgba(0, 0, 0, 0.12);
+  background: rgba(255, 255, 255, 0.09);
+  border-color: var(--border-2);
 }
 
 .btn-apple:active {
@@ -121,7 +124,7 @@ body.app-body {
 .btn-apple-primary {
   background: var(--accent);
   border-color: transparent;
-  color: #fff;
+  color: #07120d;
 }
 
 .btn-apple-primary:hover {
@@ -147,7 +150,7 @@ body.app-body {
   height: var(--touch);
   border-radius: 999px;
   border: 1px solid var(--border);
-  background: rgba(255, 255, 255, 0.75);
+  background: rgba(255, 255, 255, 0.06);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -156,7 +159,7 @@ body.app-body {
 }
 
 .btn-apple-icon:hover {
-  background: rgba(255, 255, 255, 1);
+  background: rgba(255, 255, 255, 0.09);
 }
 
 .btn-apple-icon:active {
@@ -164,18 +167,18 @@ body.app-body {
 }
 
 .btn-apple-icon.is-paid {
-  border-color: rgba(52, 199, 89, 0.35);
-  color: #1f7a3a;
+  border-color: rgba(16, 185, 129, 0.45);
+  color: var(--accent-hover);
 }
 
 .btn-apple-icon.is-unpaid {
-  border-color: rgba(255, 159, 10, 0.35);
-  color: #8a4d00;
+  border-color: rgba(251, 191, 36, 0.35);
+  color: rgba(251, 191, 36, 0.95);
 }
 
 .btn-apple-icon.is-danger:hover {
-  border-color: rgba(255, 59, 48, 0.4);
-  color: #b42318;
+  border-color: rgba(251, 113, 133, 0.5);
+  color: var(--danger);
 }
 
 /* Invoice list */
@@ -188,14 +191,14 @@ body.app-body {
 .empty-state {
   padding: 22px;
   background: var(--card);
-  border: 1px dashed rgba(0, 0, 0, 0.18);
+  border: 1px dashed rgba(148, 163, 184, 0.28);
   border-radius: var(--radius);
   color: var(--muted);
   box-shadow: var(--shadow-sm);
 }
 
 .invoice-card {
-  background: var(--card);
+  background: linear-gradient(180deg, rgba(17, 24, 22, 1), rgba(15, 21, 19, 1));
   border: 1px solid var(--border);
   border-radius: var(--radius);
   box-shadow: var(--shadow-sm);
@@ -242,7 +245,7 @@ body.app-body {
 @media (max-width: 639px) {
   .invoice-card-actions {
     padding-top: 10px;
-    border-top: 1px solid rgba(0, 0, 0, 0.06);
+    border-top: 1px solid rgba(148, 163, 184, 0.14);
   }
 }
 
@@ -266,13 +269,13 @@ body.app-body {
   height: 44px;
   border-radius: 12px;
   border: 1px solid var(--border);
-  background: rgba(0, 0, 0, 0.03);
+  background: rgba(255, 255, 255, 0.05);
   cursor: pointer;
 }
 
 .btn-remove-line:hover {
-  background: rgba(255, 59, 48, 0.08);
-  border-color: rgba(255, 59, 48, 0.25);
+  background: rgba(251, 113, 133, 0.12);
+  border-color: rgba(251, 113, 133, 0.35);
 }
 
 /* Forms + modals */
@@ -280,24 +283,41 @@ body.app-body {
   border: 0;
   border-radius: 18px;
   box-shadow: var(--shadow);
+  background: var(--card);
+  color: var(--text);
 }
 
 .modal-header,
 .modal-footer {
-  border-color: rgba(0, 0, 0, 0.06);
+  border-color: rgba(148, 163, 184, 0.14);
 }
 
 .form-control,
 .form-select {
   border-radius: 12px;
-  border-color: rgba(0, 0, 0, 0.12);
+  border-color: rgba(148, 163, 184, 0.22);
   padding: 12px 12px;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text);
 }
 
 .form-control:focus,
 .form-select:focus {
-  border-color: rgba(0, 113, 227, 0.5);
-  box-shadow: 0 0 0 4px rgba(0, 113, 227, 0.12);
+  border-color: rgba(16, 185, 129, 0.55);
+  box-shadow: 0 0 0 4px rgba(16, 185, 129, 0.14);
+}
+
+.form-control::placeholder {
+  color: rgba(226, 232, 240, 0.55);
+}
+
+.btn-close {
+  filter: invert(1);
+  opacity: 0.7;
+}
+
+.btn-close:hover {
+  opacity: 0.95;
 }
 
 /* Toast */
