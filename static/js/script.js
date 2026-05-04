@@ -340,7 +340,10 @@ async function duplicateInvoice(invoiceId) {
       throw new Error(data.error || 'Failed to duplicate invoice');
     }
     showSuccess(`Duplicated as ${data.invoice_number}`);
-    loadInvoices();
+    await loadInvoices();
+    if (data.id) {
+      openEditInvoice(data.id);
+    }
   } catch (error) {
     showError(error.message || 'Failed to duplicate invoice');
   }
