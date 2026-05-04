@@ -87,24 +87,48 @@ def _client_json(client):
     }
 
 
-def generate_invoice_number(client_name):
-    name_parts = client_name.split()
-
+def _invoice_prefix(client_name: str) -> str:
+    name_parts = (client_name or "").split()
     if len(name_parts) >= 3:
         business_words = [word for word in name_parts if word and word[0].isupper()]
         if len(business_words) >= 3:
             prefix = "".join(word[0] for word in business_words[:3]).upper()
             if "Saturday Love Funk" in client_name:
                 prefix = "SLF"
+            return prefix
 
-            count = Invoice.query.join(Client).filter(Client.name == client_name).count()
-            return f"{prefix}{(count + 1):03d}"
+    if not name_parts:
+        return "INV"
 
     prefix = "".join(c for c in name_parts[0][:3] if c.isalpha()).upper()
     prefix = (prefix + "XXX")[:3]
+    return prefix
 
-    count = Invoice.query.join(Client).filter(Client.name == client_name).count()
-    return f"{prefix}{(count + 1):03d}"
+
+def generate_invoice_number(client: Client) -> str:
+    """
+    Generate the next invoice number for a client.
+
+    This uses the highest existing numeric suffix for the client's prefix, so
+    manual edits like TOX105 won't break subsequent numbering (next becomes TOX106).
+    """
+    prefix = _invoice_prefix(client.name)
+    existing = (
+        db.session.query(Invoice.invoice_number)
+        .filter(Invoice.client_id == client.id)
+        .filter(Invoice.invoice_number.like(f"{prefix}%"))
+        .all()
+    )
+
+    max_suffix = 0
+    for (num,) in existing:
+        if not num or not num.startswith(prefix):
+            continue
+        suffix = num[len(prefix) :]
+        if suffix.isdigit():
+            max_suffix = max(max_suffix, int(suffix))
+
+    return f"{prefix}{(max_suffix + 1):03d}"
 
 
 @app.route("/health")
@@ -149,7 +173,7 @@ def handle_invoices():
             os.makedirs(client_folder)
 
         new_invoice = Invoice(
-            invoice_number=generate_invoice_number(client.name),
+            invoice_number=generate_invoice_number(client),
             client_id=client.id,
             date=datetime.utcnow(),
         )
@@ -220,6 +244,18 @@ def handle_invoice(invoice_id):
 
     if request.method == "PUT":
         data = request.json or {}
+        new_number = (data.get("invoice_number") or "").strip()
+        if new_number and new_number != invoice.invoice_number:
+            exists = (
+                db.session.query(Invoice.id)
+                .filter(Invoice.invoice_number == new_number)
+                .filter(Invoice.id != invoice.id)
+                .first()
+            )
+            if exists:
+                return jsonify({"error": "Invoice number already exists"}), 409
+            invoice.invoice_number = new_number
+
         InvoiceItem.query.filter_by(invoice_id=invoice.id).delete()
 
         total_amount = 0.0
@@ -326,7 +362,7 @@ def duplicate_invoice(invoice_id):
         return jsonify({"success": False, "error": "Client not found"}), 404
 
     new_invoice = Invoice(
-        invoice_number=generate_invoice_number(client.name),
+        invoice_number=generate_invoice_number(client),
         client_id=client.id,
         date=datetime.utcnow(),
         paid=False,

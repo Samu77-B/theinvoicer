@@ -288,6 +288,7 @@ async function updateInvoice() {
   try {
     const form = document.getElementById('editInvoiceForm');
     const invoiceId = form.querySelector('input[name="invoice_id"]').value;
+    const invoiceNumber = (form.querySelector('input[name="invoice_number"]').value || '').trim();
     const descriptions = Array.from(form.querySelectorAll('#editInvoiceItems input[name="description[]"]')).map((input) => input.value);
     const amounts = Array.from(form.querySelectorAll('#editInvoiceItems input[name="amount[]"]')).map((input) => parseFloat(input.value));
 
@@ -299,10 +300,13 @@ async function updateInvoice() {
     const response = await fetch(`/api/invoices/${invoiceId}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ items }),
+      body: JSON.stringify({ items, invoice_number: invoiceNumber }),
     });
 
-    if (!response.ok) throw new Error('Failed to update invoice');
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      throw new Error(data.error || 'Failed to update invoice');
+    }
 
     showSuccess('Invoice updated successfully');
     bootstrap.Modal.getInstance(document.getElementById('editInvoiceModal')).hide();
