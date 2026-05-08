@@ -5,6 +5,15 @@ document.addEventListener('DOMContentLoaded', () => {
   loadInvoices();
   addInvoiceItem();
 
+  const vatCb = document.getElementById('invoiceVatApplies');
+  if (vatCb) {
+    vatCb.addEventListener('change', syncInvoiceVatUi);
+  }
+  const editVatCb = document.getElementById('editInvoiceVatApplies');
+  if (editVatCb) {
+    editVatCb.addEventListener('change', syncEditInvoiceVatUi);
+  }
+
   const newInvModal = document.getElementById('newInvoiceModal');
   if (newInvModal) {
     newInvModal.addEventListener('shown.bs.modal', () => {
@@ -12,6 +21,18 @@ document.addEventListener('DOMContentLoaded', () => {
       if (box && box.children.length === 0) {
         addInvoiceItem();
       }
+      const vatCheck = document.getElementById('invoiceVatApplies');
+      const vatRate = document.getElementById('invoiceVatRate');
+      if (vatCheck) vatCheck.checked = false;
+      if (vatRate) vatRate.value = '20';
+      syncInvoiceVatUi();
+    });
+  }
+
+  const reportsModal = document.getElementById('reportsModal');
+  if (reportsModal) {
+    reportsModal.addEventListener('shown.bs.modal', () => {
+      loadReport('month');
     });
   }
 });
@@ -30,9 +51,87 @@ function formatUkDate(isoYmd) {
   return `${p[2]}/${p[1]}/${p[0]}`;
 }
 
+async function apiFetch(url, options = {}) {
+  const r = await fetch(url, { credentials: 'same-origin', ...options });
+  if (r.status === 401) {
+    window.location.href = '/login';
+    throw new Error('Unauthorized');
+  }
+  return r;
+}
+
+function syncInvoiceVatUi() {
+  const cb = document.getElementById('invoiceVatApplies');
+  const wrap = document.getElementById('invoiceVatRateWrap');
+  if (cb && wrap) wrap.style.display = cb.checked ? 'block' : 'none';
+}
+
+function syncEditInvoiceVatUi() {
+  const cb = document.getElementById('editInvoiceVatApplies');
+  const wrap = document.getElementById('editInvoiceVatRateWrap');
+  if (cb && wrap) wrap.style.display = cb.checked ? 'block' : 'none';
+}
+
+function setReportPeriodUI(period) {
+  const w = document.getElementById('reportWeekBtn');
+  const m = document.getElementById('reportMonthBtn');
+  if (!w || !m) return;
+  if (period === 'week') {
+    w.classList.add('btn-apple-primary');
+    w.classList.remove('btn-apple-secondary');
+    m.classList.add('btn-apple-secondary');
+    m.classList.remove('btn-apple-primary');
+  } else {
+    m.classList.add('btn-apple-primary');
+    m.classList.remove('btn-apple-secondary');
+    w.classList.add('btn-apple-secondary');
+    w.classList.remove('btn-apple-primary');
+  }
+}
+
+async function loadReport(period) {
+  setReportPeriodUI(period);
+  const el = document.getElementById('reportsContent');
+  if (!el) return;
+  el.innerHTML = '<p class="text-muted mb-0">Loading…</p>';
+  try {
+    const response = await apiFetch(`/api/reports?period=${encodeURIComponent(period)}`);
+    if (!response.ok) throw new Error('Failed to load report');
+    const data = await response.json();
+    const rowsHtml = (data.invoices || [])
+      .map(
+        (inv) => `
+      <tr>
+        <td>${escapeHtml(inv.invoice_number)}</td>
+        <td>${escapeHtml(formatUkDate(inv.date))}</td>
+        <td>${escapeHtml(inv.client_name)}</td>
+        <td class="text-end">£${Number(inv.total_amount).toFixed(2)}</td>
+        <td>${inv.paid ? '<span class="text-success">Paid</span>' : '<span class="text-warning">Unpaid</span>'}</td>
+      </tr>`
+      )
+      .join('');
+    el.innerHTML = `
+      <p class="text-muted mb-3" style="font-size: 13px;">${escapeHtml(data.range_start)} – ${escapeHtml(data.range_end)} · UTC calendar ${escapeHtml(data.period)}</p>
+      <div class="reports-summary">
+        <div class="reports-stat"><p class="label">Invoices</p><p class="value">${data.invoice_count}</p></div>
+        <div class="reports-stat"><p class="label">Invoiced</p><p class="value">£${Number(data.total_invoiced).toFixed(2)}</p></div>
+        <div class="reports-stat"><p class="label">Paid</p><p class="value">£${Number(data.paid_total).toFixed(2)}</p></div>
+        <div class="reports-stat"><p class="label">Unpaid</p><p class="value">£${Number(data.unpaid_total).toFixed(2)}</p></div>
+      </div>
+      <div class="table-responsive rounded-3 border" style="border-color: var(--border) !important;">
+        <table class="table table-dark table-striped mb-0" style="--bs-table-bg: transparent;">
+          <thead><tr><th>Invoice</th><th>Date</th><th>Client</th><th class="text-end">Total</th><th>Status</th></tr></thead>
+          <tbody>${rowsHtml || '<tr><td colspan="5" class="text-muted">No invoices in this period.</td></tr>'}</tbody>
+        </table>
+      </div>`;
+  } catch (e) {
+    el.innerHTML = `<p class="text-danger mb-0">${escapeHtml(e.message || 'Failed to load report')}</p>`;
+  }
+}
+
 async function loadClients() {
   try {
-    const response = await fetch('/api/clients');
+    const response = await apiFetch('/api/clients');
     if (!response.ok) throw new Error('Failed to load clients');
     const clients = await response.json();
 
@@ -63,7 +162,7 @@ async function saveClient() {
       return;
     }
 
-    const response = await fetch('/api/clients', {
+    const response = await apiFetch('/api/clients', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name, email, address }),
@@ -125,10 +224,23 @@ async function saveInvoice() {
       amount: amounts[index],
     }));
 
-    const response = await fetch('/api/invoices', {
+    const vatApplies = document.getElementById('invoiceVatApplies')?.checked || false;
+    const vatRateRaw = document.getElementById('invoiceVatRate')?.value;
+    const vatRatePercent = vatApplies ? parseFloat(vatRateRaw) : undefined;
+    if (vatApplies && (Number.isNaN(vatRatePercent) || vatRatePercent < 0 || vatRatePercent > 100)) {
+      showError('Enter a valid VAT rate between 0 and 100');
+      return;
+    }
+
+    const response = await apiFetch('/api/invoices', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ client_id: parseInt(clientId, 10), items }),
+      body: JSON.stringify({
+        client_id: parseInt(clientId, 10),
+        items,
+        vat_applies: vatApplies,
+        vat_rate_percent: vatRatePercent,
+      }),
     });
 
     if (!response.ok) throw new Error('Failed to save invoice');
@@ -161,6 +273,27 @@ function renderInvoicePreviewHtml(invoice) {
     )
     .join('');
 
+  const subtotal =
+    invoice.subtotal_net != null
+      ? Number(invoice.subtotal_net)
+      : invoice.items.reduce((s, item) => s + Number(item.amount), 0);
+  const vatApplies = !!invoice.vat_applies;
+  const amtHeading = vatApplies ? 'Amount (net)' : 'Amount';
+  const vatRows = vatApplies
+    ? `
+                <tr>
+                    <td class="text-end" style="border-left: none; border-bottom: none;">Subtotal (net)</td>
+                    <td class="text-end">£${subtotal.toFixed(2)}</td>
+                </tr>
+                <tr>
+                    <td class="text-end" style="border-left: none; border-bottom: none;">VAT (${Number(
+                      invoice.vat_rate_percent ?? 20
+                    ).toFixed(2)}%)</td>
+                    <td class="text-end">£${Number(invoice.vat_amount || 0).toFixed(2)}</td>
+                </tr>`
+    : '';
+  const totalLabel = vatApplies ? 'Total due' : 'Total';
+
   return `
         <div class="invoice-header">
             <div class="invoice-header-left">
@@ -188,13 +321,14 @@ function renderInvoicePreviewHtml(invoice) {
             <thead>
                 <tr>
                     <th style="width: 70%">Description</th>
-                    <th style="width: 30%" class="text-end">Amount</th>
+                    <th style="width: 30%" class="text-end">${amtHeading}</th>
                 </tr>
             </thead>
             <tbody>
                 ${rows}
+                ${vatRows}
                 <tr>
-                    <td class="text-end" style="border-left: none; border-bottom: none;"><strong>Total</strong></td>
+                    <td class="text-end" style="border-left: none; border-bottom: none;"><strong>${totalLabel}</strong></td>
                     <td class="text-end"><strong>£${Number(invoice.total_amount).toFixed(2)}</strong></td>
                 </tr>
             </tbody>
@@ -214,7 +348,7 @@ function renderInvoicePreviewHtml(invoice) {
 
 async function openInvoicePreview(invoiceId) {
   try {
-    const response = await fetch(`/api/invoices/${invoiceId}`);
+    const response = await apiFetch(`/api/invoices/${invoiceId}`);
     if (!response.ok) throw new Error('Failed to load invoice');
     const invoice = await response.json();
     previewInvoiceId = invoice.id;
@@ -235,7 +369,7 @@ async function openInvoicePreview(invoiceId) {
 
 async function openEditInvoice(invoiceId) {
   try {
-    const response = await fetch(`/api/invoices/${invoiceId}`);
+    const response = await apiFetch(`/api/invoices/${invoiceId}`);
     if (!response.ok) throw new Error('Failed to load invoice');
     const invoice = await response.json();
 
@@ -257,6 +391,17 @@ async function openEditInvoice(invoiceId) {
         `;
 
     invoice.items.forEach((item) => addEditInvoiceItem(item));
+
+    const ev = document.getElementById('editInvoiceVatApplies');
+    const er = document.getElementById('editInvoiceVatRate');
+    if (ev) ev.checked = !!invoice.vat_applies;
+    if (er) {
+      er.value =
+        invoice.vat_applies && invoice.vat_rate_percent != null
+          ? String(invoice.vat_rate_percent)
+          : '20';
+    }
+    syncEditInvoiceVatUi();
 
     const modal = new bootstrap.Modal(document.getElementById('editInvoiceModal'));
     modal.show();
@@ -302,10 +447,23 @@ async function updateInvoice() {
       amount: amounts[index],
     }));
 
-    const response = await fetch(`/api/invoices/${invoiceId}`, {
+    const vatApplies = document.getElementById('editInvoiceVatApplies')?.checked || false;
+    const vatRateRaw = document.getElementById('editInvoiceVatRate')?.value;
+    const vatRatePercent = vatApplies ? parseFloat(vatRateRaw) : undefined;
+    if (vatApplies && (Number.isNaN(vatRatePercent) || vatRatePercent < 0 || vatRatePercent > 100)) {
+      showError('Enter a valid VAT rate between 0 and 100');
+      return;
+    }
+
+    const response = await apiFetch(`/api/invoices/${invoiceId}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ items, invoice_number: invoiceNumber }),
+      body: JSON.stringify({
+        items,
+        invoice_number: invoiceNumber,
+        vat_applies: vatApplies,
+        vat_rate_percent: vatRatePercent,
+      }),
     });
 
     if (!response.ok) {
@@ -325,7 +483,7 @@ async function deleteInvoice(invoiceId) {
   if (!confirm('Are you sure you want to delete this invoice?')) return;
 
   try {
-    const response = await fetch(`/api/invoices/${invoiceId}`, {
+    const response = await apiFetch(`/api/invoices/${invoiceId}`, {
       method: 'DELETE',
     });
 
@@ -340,7 +498,7 @@ async function deleteInvoice(invoiceId) {
 
 async function duplicateInvoice(invoiceId) {
   try {
-    const response = await fetch(`/api/invoices/${invoiceId}/duplicate`, {
+    const response = await apiFetch(`/api/invoices/${invoiceId}/duplicate`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
     });
@@ -360,7 +518,7 @@ async function duplicateInvoice(invoiceId) {
 
 async function loadInvoices() {
   try {
-    const response = await fetch('/api/invoices');
+    const response = await apiFetch('/api/invoices');
     if (!response.ok) throw new Error('Failed to load invoices');
     const invoices = await response.json();
 
@@ -379,6 +537,13 @@ async function loadInvoices() {
                 <div class="invoice-card-main">
                     <p class="invoice-card-title">${escapeHtml(invoice.invoice_number)} — ${escapeHtml(invoice.client.name)}</p>
                     <p class="invoice-card-meta">Date: ${escapeHtml(formatUkDate(invoice.date))}</p>
+                    ${
+                      invoice.vat_applies
+                        ? `<p class="invoice-card-vat">VAT ${Number(invoice.vat_rate_percent ?? 20).toFixed(2)}% · Net £${Number(
+                            invoice.subtotal_net ?? 0
+                          ).toFixed(2)}</p>`
+                        : ''
+                    }
                     <p class="invoice-card-amount">£${Number(invoice.total_amount).toFixed(2)}</p>
                 </div>
                 <div class="invoice-card-actions">
@@ -409,7 +574,7 @@ async function loadInvoices() {
 
 async function togglePaidStatus(invoiceId, isPaid) {
   try {
-    const response = await fetch(`/api/invoices/${invoiceId}/paid`, {
+    const response = await apiFetch(`/api/invoices/${invoiceId}/paid`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ paid: isPaid }),
@@ -436,7 +601,7 @@ async function sendInvoiceEmail() {
   try {
     const msgEl = document.getElementById('emailMessage');
     const message = (msgEl?.value || '').trim();
-    const response = await fetch(`/api/invoices/${previewInvoiceId}/send`, {
+    const response = await apiFetch(`/api/invoices/${previewInvoiceId}/send`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ message }),

@@ -1,8 +1,10 @@
-from flask import Flask, render_template, request, jsonify, send_file, url_for
+from flask import Flask, render_template, request, jsonify, send_file, url_for, session, redirect
 from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
 from werkzeug.middleware.proxy_fix import ProxyFix
-from datetime import datetime
+from werkzeug.security import generate_password_hash, check_password_hash
+from datetime import datetime, timedelta
+from sqlalchemy import inspect, text
 import os
 
 from dotenv import load_dotenv
@@ -46,6 +48,9 @@ if _engine_options:
     _config["SQLALCHEMY_ENGINE_OPTIONS"] = _engine_options
 app.config.update(_config)
 app.debug = os.environ.get("FLASK_DEBUG", "").lower() in ("1", "true", "yes")
+app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(days=14)
+app.config["SESSION_COOKIE_HTTPONLY"] = True
+app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
 
 os.makedirs(app.config["INVOICE_FOLDER"], exist_ok=True)
 
@@ -69,6 +74,9 @@ class Invoice(db.Model):
     items = db.relationship("InvoiceItem", backref="invoice", lazy=True)
     total_amount = db.Column(db.Float, nullable=False, default=0.0)
     paid = db.Column(db.Boolean, nullable=False, default=False)
+    vat_applies = db.Column(db.Boolean, nullable=False, default=False)
+    vat_rate_percent = db.Column(db.Float, nullable=True)
+    vat_amount = db.Column(db.Float, nullable=False, default=0.0)
 
 
 class InvoiceItem(db.Model):
@@ -76,6 +84,136 @@ class InvoiceItem(db.Model):
     description = db.Column(db.String(200), nullable=False)
     amount = db.Column(db.Float, nullable=False)
     invoice_id = db.Column(db.Integer, db.ForeignKey("invoice.id"), nullable=False)
+
+
+class User(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    username = db.Column(db.String(80), unique=True, nullable=False)
+    password_hash = db.Column(db.String(256), nullable=False)
+
+
+def _auth_enabled() -> bool:
+    return bool((os.environ.get("INVOICE_APP_PASSWORD") or "").strip())
+
+
+def _bootstrap_auth_user():
+    if not _auth_enabled():
+        return
+    username = (os.environ.get("INVOICE_APP_USERNAME") or "admin").strip() or "admin"
+    if User.query.filter_by(username=username).first():
+        return
+    pwd = os.environ["INVOICE_APP_PASSWORD"].strip()
+    db.session.add(User(username=username, password_hash=generate_password_hash(pwd)))
+    db.session.commit()
+
+
+def _ensure_invoice_vat_columns():
+    """Add VAT columns to existing deployments (create_all does not alter tables)."""
+    try:
+        insp = inspect(db.engine)
+        tables = insp.get_table_names()
+        if "invoice" not in tables:
+            return
+        cols = {c["name"] for c in insp.get_columns("invoice")}
+        dialect = db.engine.dialect.name
+        alters = []
+        if "vat_applies" not in cols:
+            if dialect == "sqlite":
+                alters.append(
+                    "ALTER TABLE invoice ADD COLUMN vat_applies BOOLEAN NOT NULL DEFAULT 0"
+                )
+            else:
+                alters.append(
+                    "ALTER TABLE invoice ADD COLUMN vat_applies BOOLEAN NOT NULL DEFAULT FALSE"
+                )
+        if "vat_rate_percent" not in cols:
+            alters.append("ALTER TABLE invoice ADD COLUMN vat_rate_percent FLOAT")
+        if "vat_amount" not in cols:
+            if dialect == "sqlite":
+                alters.append(
+                    "ALTER TABLE invoice ADD COLUMN vat_amount REAL NOT NULL DEFAULT 0"
+                )
+            else:
+                alters.append(
+                    "ALTER TABLE invoice ADD COLUMN vat_amount DOUBLE PRECISION NOT NULL DEFAULT 0"
+                )
+        for stmt in alters:
+            with db.engine.begin() as conn:
+                conn.execute(text(stmt))
+    except Exception as e:
+        app.logger.warning("Could not ensure invoice VAT columns: %s", e)
+
+
+def _calendar_week_range(now=None):
+    """Monday 00:00 UTC through the following Monday 00:00 UTC (end exclusive)."""
+    now = now or datetime.utcnow()
+    start = (now - timedelta(days=now.weekday())).replace(
+        hour=0, minute=0, second=0, microsecond=0
+    )
+    end = start + timedelta(days=7)
+    return start, end
+
+
+def _calendar_month_range(now=None):
+    """First day of month 00:00 UTC through first day of next month (end exclusive)."""
+    now = now or datetime.utcnow()
+    start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    if start.month == 12:
+        end = start.replace(year=start.year + 1, month=1)
+    else:
+        end = start.replace(month=start.month + 1)
+    return start, end
+
+
+def _net_subtotal_from_items(items):
+    total = 0.0
+    for it in items:
+        if isinstance(it, dict):
+            total += float(it["amount"])
+        else:
+            total += float(it.amount)
+    return round(total, 2)
+
+
+def _vat_amount_and_total(net_subtotal: float, vat_applies: bool, vat_rate_percent):
+    if not vat_applies or vat_rate_percent is None:
+        return 0.0, round(float(net_subtotal), 2)
+    rate = float(vat_rate_percent)
+    vat = round(net_subtotal * rate / 100.0, 2)
+    return vat, round(net_subtotal + vat, 2)
+
+
+def _invoice_dict(inv: Invoice):
+    subtotal = _net_subtotal_from_items(inv.items)
+    return {
+        "id": inv.id,
+        "invoice_number": inv.invoice_number,
+        "date": inv.date.strftime("%Y-%m-%d"),
+        "client": _client_json(inv.client),
+        "items": [
+            {"description": item.description, "amount": item.amount} for item in inv.items
+        ],
+        "subtotal_net": subtotal,
+        "vat_applies": bool(inv.vat_applies),
+        "vat_rate_percent": inv.vat_rate_percent,
+        "vat_amount": float(inv.vat_amount or 0.0),
+        "total_amount": inv.total_amount,
+        "paid": inv.paid,
+    }
+
+
+def _parse_vat_from_payload(data: dict):
+    vat_applies = bool(data.get("vat_applies", False))
+    raw_rate = data.get("vat_rate_percent")
+    rate = None
+    if vat_applies:
+        try:
+            rate = float(raw_rate if raw_rate is not None else 20.0)
+        except (TypeError, ValueError):
+            return None, None, "Invalid VAT rate"
+        if rate < 0 or rate > 100:
+            return None, None, "VAT rate must be between 0 and 100"
+    return vat_applies, rate, None
 
 
 def _client_json(client):
@@ -136,9 +274,93 @@ def health():
     return jsonify({"status": "ok"}), 200
 
 
+@app.before_request
+def _require_login():
+    if not _auth_enabled():
+        return None
+    if request.endpoint in (None, "static", "health", "login", "logout"):
+        return None
+    if session.get("user_id"):
+        return None
+    if request.path.startswith("/api/"):
+        return jsonify({"error": "Unauthorized"}), 401
+    return redirect(url_for("login", next=request.path))
+
+
+@app.route("/login", methods=["GET", "POST"])
+def login():
+    if not _auth_enabled():
+        return redirect(url_for("index"))
+    if request.method == "POST":
+        username = (request.form.get("username") or "").strip()
+        password = request.form.get("password") or ""
+        user = User.query.filter_by(username=username).first()
+        if user and check_password_hash(user.password_hash, password):
+            session.clear()
+            session["user_id"] = user.id
+            session.permanent = True
+            nxt = request.args.get("next") or ""
+            if nxt.startswith("/") and not nxt.startswith("//"):
+                return redirect(nxt)
+            return redirect(url_for("index"))
+        return render_template("login.html", error="Invalid username or password"), 401
+    return render_template("login.html")
+
+
+@app.route("/logout")
+def logout():
+    session.pop("user_id", None)
+    if _auth_enabled():
+        return redirect(url_for("login"))
+    return redirect(url_for("index"))
+
+
 @app.route("/")
 def index():
-    return render_template("index.html")
+    return render_template("index.html", auth_enabled=_auth_enabled())
+
+
+@app.route("/api/reports")
+def api_reports():
+    period = (request.args.get("period") or "month").strip().lower()
+    if period == "week":
+        start, end = _calendar_week_range()
+    else:
+        period = "month"
+        start, end = _calendar_month_range()
+
+    rows = (
+        Invoice.query.filter(Invoice.date >= start, Invoice.date < end)
+        .order_by(Invoice.date.desc())
+        .all()
+    )
+    total_invoiced = sum(float(inv.total_amount or 0) for inv in rows)
+    paid_total = sum(float(inv.total_amount or 0) for inv in rows if inv.paid)
+    unpaid_total = total_invoiced - paid_total
+    end_inclusive = end - timedelta(seconds=1)
+
+    return jsonify(
+        {
+            "period": period,
+            "range_start": start.strftime("%Y-%m-%d"),
+            "range_end": end_inclusive.strftime("%Y-%m-%d"),
+            "invoice_count": len(rows),
+            "total_invoiced": round(total_invoiced, 2),
+            "paid_total": round(paid_total, 2),
+            "unpaid_total": round(unpaid_total, 2),
+            "invoices": [
+                {
+                    "id": inv.id,
+                    "invoice_number": inv.invoice_number,
+                    "date": inv.date.strftime("%Y-%m-%d"),
+                    "client_name": inv.client.name,
+                    "total_amount": inv.total_amount,
+                    "paid": inv.paid,
+                }
+                for inv in rows
+            ],
+        }
+    )
 
 
 @app.route("/api/clients", methods=["GET", "POST"])
@@ -172,22 +394,29 @@ def handle_invoices():
         if not os.path.exists(client_folder):
             os.makedirs(client_folder)
 
+        vat_applies, vat_rate, vat_err = _parse_vat_from_payload(data)
+        if vat_err:
+            return jsonify({"error": vat_err}), 400
+
         new_invoice = Invoice(
             invoice_number=generate_invoice_number(client),
             client_id=client.id,
             date=datetime.utcnow(),
+            vat_applies=vat_applies,
+            vat_rate_percent=vat_rate if vat_applies else None,
         )
 
-        total_amount = 0.0
         for item_data in data.get("items", []):
             item = InvoiceItem(
                 description=item_data["description"],
                 amount=float(item_data["amount"]),
             )
-            total_amount += item.amount
             new_invoice.items.append(item)
 
-        new_invoice.total_amount = total_amount
+        net = _net_subtotal_from_items(new_invoice.items)
+        vat_amt, gross = _vat_amount_and_total(net, vat_applies, vat_rate)
+        new_invoice.vat_amount = vat_amt if vat_applies else 0.0
+        new_invoice.total_amount = gross
         db.session.add(new_invoice)
         db.session.commit()
 
@@ -201,23 +430,7 @@ def handle_invoices():
         )
 
     invoices = Invoice.query.all()
-    return jsonify(
-        [
-            {
-                "id": inv.id,
-                "invoice_number": inv.invoice_number,
-                "date": inv.date.strftime("%Y-%m-%d"),
-                "client": _client_json(inv.client),
-                "items": [
-                    {"description": item.description, "amount": item.amount}
-                    for item in inv.items
-                ],
-                "total_amount": inv.total_amount,
-                "paid": inv.paid,
-            }
-            for inv in invoices
-        ]
-    )
+    return jsonify([_invoice_dict(inv) for inv in invoices])
 
 
 @app.route("/api/invoices/<int:invoice_id>", methods=["GET", "PUT", "DELETE"])
@@ -227,20 +440,7 @@ def handle_invoice(invoice_id):
         return jsonify({"error": "Not found"}), 404
 
     if request.method == "GET":
-        return jsonify(
-            {
-                "id": invoice.id,
-                "invoice_number": invoice.invoice_number,
-                "date": invoice.date.strftime("%Y-%m-%d"),
-                "client": _client_json(invoice.client),
-                "items": [
-                    {"description": item.description, "amount": item.amount}
-                    for item in invoice.items
-                ],
-                "total_amount": invoice.total_amount,
-                "paid": invoice.paid,
-            }
-        )
+        return jsonify(_invoice_dict(invoice))
 
     if request.method == "PUT":
         data = request.json or {}
@@ -256,19 +456,40 @@ def handle_invoice(invoice_id):
                 return jsonify({"error": "Invoice number already exists"}), 409
             invoice.invoice_number = new_number
 
+        merged = {**data}
+        if "vat_applies" not in merged:
+            merged["vat_applies"] = invoice.vat_applies
+        if (
+            merged.get("vat_applies")
+            and merged.get("vat_rate_percent") is None
+            and invoice.vat_rate_percent is not None
+        ):
+            merged["vat_rate_percent"] = invoice.vat_rate_percent
+
+        vat_applies, vat_rate, vat_err = _parse_vat_from_payload(merged)
+        if vat_err:
+            return jsonify({"error": vat_err}), 400
+        invoice.vat_applies = vat_applies
+        invoice.vat_rate_percent = vat_rate if vat_applies else None
+
         InvoiceItem.query.filter_by(invoice_id=invoice.id).delete()
 
-        total_amount = 0.0
+        items_buffer = []
         for item_data in data.get("items", []):
             item = InvoiceItem(
                 description=item_data["description"],
                 amount=float(item_data["amount"]),
                 invoice_id=invoice.id,
             )
-            total_amount += item.amount
+            items_buffer.append(item)
             db.session.add(item)
 
-        invoice.total_amount = total_amount
+        net = _net_subtotal_from_items(
+            [{"amount": i.amount, "description": i.description} for i in items_buffer]
+        )
+        vat_amt, gross = _vat_amount_and_total(net, vat_applies, vat_rate)
+        invoice.vat_amount = vat_amt if vat_applies else 0.0
+        invoice.total_amount = gross
         db.session.commit()
         return jsonify({"message": "Invoice updated successfully"})
 
@@ -348,6 +569,7 @@ def send_invoice_email(invoice_id):
             invoice=invoice,
             message=message or None,
             logo_url=logo_url,
+            subtotal_net=_net_subtotal_from_items(invoice.items),
         )
         params = {
             "from": from_email,
@@ -372,20 +594,26 @@ def duplicate_invoice(invoice_id):
     if not client:
         return jsonify({"success": False, "error": "Client not found"}), 404
 
+    vat_applies = bool(invoice.vat_applies)
+    vat_rate = invoice.vat_rate_percent if vat_applies else None
+
     new_invoice = Invoice(
         invoice_number=generate_invoice_number(client),
         client_id=client.id,
         date=datetime.utcnow(),
         paid=False,
+        vat_applies=vat_applies,
+        vat_rate_percent=vat_rate if vat_applies else None,
     )
 
-    total_amount = 0.0
     for item in invoice.items:
         new_item = InvoiceItem(description=item.description, amount=float(item.amount))
-        total_amount += new_item.amount
         new_invoice.items.append(new_item)
 
-    new_invoice.total_amount = total_amount
+    net = _net_subtotal_from_items(new_invoice.items)
+    vat_amt, gross = _vat_amount_and_total(net, vat_applies, vat_rate)
+    new_invoice.vat_amount = vat_amt if vat_applies else 0.0
+    new_invoice.total_amount = gross
     db.session.add(new_invoice)
     db.session.commit()
 
@@ -402,6 +630,8 @@ def duplicate_invoice(invoice_id):
 # Ensure tables exist (Railway runs gunicorn, not run.py — create_all is idempotent)
 with app.app_context():
     db.create_all()
+    _ensure_invoice_vat_columns()
+    _bootstrap_auth_user()
 
 
 if __name__ == "__main__":

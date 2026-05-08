@@ -49,7 +49,7 @@
 
   <table>
     <thead>
-      <tr><th>Description</th><th class="amt">Amount</th></tr>
+      <tr><th>Description</th><th class="amt">{% if invoice.vat_applies %}Amount (net){% else %}Amount{% endif %}</th></tr>
     </thead>
     <tbody>
       {% for item in invoice.items %}
@@ -58,8 +58,18 @@
         <td class="amt">&pound;{{ '%.2f'|format(item.amount) }}</td>
       </tr>
       {% endfor %}
+      {% if invoice.vat_applies %}
+      <tr>
+        <td>Subtotal (net)</td>
+        <td class="amt">&pound;{{ '%.2f'|format(subtotal_net) }}</td>
+      </tr>
+      <tr>
+        <td>VAT ({{ '%.2f'|format(invoice.vat_rate_percent or 0) }}%)</td>
+        <td class="amt">&pound;{{ '%.2f'|format(invoice.vat_amount or 0) }}</td>
+      </tr>
+      {% endif %}
       <tr class="total">
-        <td class="amt">Total</td>
+        <td>{% if invoice.vat_applies %}Total due{% else %}Total{% endif %}</td>
         <td class="amt">&pound;{{ '%.2f'|format(invoice.total_amount) }}</td>
       </tr>
     </tbody>

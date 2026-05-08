@@ -19,6 +19,10 @@
         <p class="app-brand-sub">Clients, invoices, and email sending</p>
       </div>
       <div class="app-actions">
+        <button type="button" class="btn-apple btn-apple-secondary" data-bs-toggle="modal" data-bs-target="#reportsModal">
+          <i class="fas fa-chart-column"></i>
+          <span>Reports</span>
+        </button>
         <button type="button" class="btn-apple btn-apple-secondary" data-bs-toggle="modal" data-bs-target="#newClientModal">
           <i class="fas fa-user-plus"></i>
           <span>New client</span>
@@ -27,6 +31,12 @@
           <i class="fas fa-file-invoice"></i>
           <span>New invoice</span>
         </button>
+        {% if auth_enabled %}
+        <a class="btn-apple btn-apple-secondary" href="{{ url_for('logout') }}">
+          <i class="fas fa-right-from-bracket"></i>
+          <span>Sign out</span>
+        </a>
+        {% endif %}
       </div>
     </div>
   </header>
@@ -94,12 +104,45 @@
               <i class="fas fa-plus"></i>
               <span>Add line</span>
             </button>
+            <div class="mt-3 p-3 rounded-3 border border-secondary-subtle" style="border-color: var(--border) !important; background: var(--card-2);">
+              <div class="form-check">
+                <input class="form-check-input" type="checkbox" id="invoiceVatApplies" name="vat_applies">
+                <label class="form-check-label" for="invoiceVatApplies">Add UK VAT — line amounts are <strong>net</strong> (excluding VAT)</label>
+              </div>
+              <div class="row mt-2 align-items-end" id="invoiceVatRateWrap" style="display: none;">
+                <div class="col-sm-4">
+                  <label class="form-label" for="invoiceVatRate">VAT rate (%)</label>
+                  <input type="number" class="form-control" id="invoiceVatRate" value="20" min="0" max="100" step="0.01" title="UK standard rate is 20%">
+                </div>
+              </div>
+            </div>
             <button type="submit" class="visually-hidden">Submit</button>
           </form>
         </div>
         <div class="modal-footer">
           <button type="button" class="btn-apple btn-apple-secondary" data-bs-dismiss="modal">Cancel</button>
           <button type="button" class="btn-apple btn-apple-primary" onclick="saveInvoice()">Create invoice</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Reports -->
+  <div class="modal fade" id="reportsModal" tabindex="-1" aria-labelledby="reportsModalLabel">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="reportsModalLabel">Reports</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <div class="btn-group mb-3" role="group" aria-label="Report period">
+            <button type="button" class="btn-apple btn-apple-secondary" id="reportWeekBtn" onclick="loadReport('week')">This week</button>
+            <button type="button" class="btn-apple btn-apple-primary" id="reportMonthBtn" onclick="loadReport('month')">This month</button>
+          </div>
+          <div id="reportsContent">
+            <p class="text-muted mb-0">Choose a period to load totals and invoice list (calendar week from Monday, calendar month in UTC).</p>
+          </div>
         </div>
       </div>
     </div>
@@ -164,6 +207,18 @@
               <i class="fas fa-plus"></i>
               <span>Add line</span>
             </button>
+            <div class="mt-3 p-3 rounded-3 border border-secondary-subtle" style="border-color: var(--border) !important; background: var(--card-2);">
+              <div class="form-check">
+                <input class="form-check-input" type="checkbox" id="editInvoiceVatApplies" name="edit_vat_applies">
+                <label class="form-check-label" for="editInvoiceVatApplies">Add UK VAT — line amounts are net (excluding VAT)</label>
+              </div>
+              <div class="row mt-2 align-items-end" id="editInvoiceVatRateWrap" style="display: none;">
+                <div class="col-sm-4">
+                  <label class="form-label" for="editInvoiceVatRate">VAT rate (%)</label>
+                  <input type="number" class="form-control" id="editInvoiceVatRate" value="20" min="0" max="100" step="0.01">
+                </div>
+              </div>
+            </div>
             <button type="submit" class="visually-hidden">Submit</button>
           </form>
         </div>
