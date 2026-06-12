@@ -39,7 +39,15 @@ document.addEventListener('DOMContentLoaded', () => {
       if (vatCheck) vatCheck.checked = false;
       if (vatRate) vatRate.value = '20';
       syncInvoiceVatUi();
+      const invNum = document.getElementById('invoiceNumber');
+      if (invNum) invNum.value = '';
+      updateSuggestedInvoiceNumber();
     });
+  }
+
+  const invoiceClientSelect = document.getElementById('invoiceClient');
+  if (invoiceClientSelect) {
+    invoiceClientSelect.addEventListener('change', updateSuggestedInvoiceNumber);
   }
 
   const newQuoteModal = document.getElementById('newQuoteModal');
@@ -238,6 +246,34 @@ async function loadClients() {
   }
 }
 
+async function updateSuggestedInvoiceNumber() {
+  const select = document.getElementById('invoiceClient');
+  const hint = document.getElementById('invoiceNumberHint');
+  const input = document.getElementById('invoiceNumber');
+  const clientId = select?.value;
+
+  if (!clientId) {
+    if (hint) {
+      hint.textContent = 'Pick a client to see the next number, or enter your own (e.g. TOX200).';
+    }
+    return;
+  }
+
+  try {
+    const response = await apiFetch(`/api/clients/${clientId}/next-invoice-number`);
+    if (!response.ok) throw new Error('Failed to load next invoice number');
+    const data = await response.json();
+    if (hint) {
+      hint.textContent = `Next auto number: ${data.invoice_number}. Leave the field blank to use it, or enter a different starting code.`;
+    }
+    if (input && !input.value.trim()) {
+      input.placeholder = data.invoice_number;
+    }
+  } catch (error) {
+    if (hint) hint.textContent = 'Enter an invoice number or leave blank to auto-generate.';
+  }
+}
+
 async function saveClient() {
   try {
     const form = document.getElementById('clientForm');
@@ -320,18 +356,27 @@ async function saveInvoice() {
       return;
     }
 
+    const invoiceNumber = (document.getElementById('invoiceNumber')?.value || '').trim();
+    const payload = {
+      client_id: parseInt(clientId, 10),
+      items,
+      vat_applies: vatApplies,
+      vat_rate_percent: vatRatePercent,
+    };
+    if (invoiceNumber) {
+      payload.invoice_number = invoiceNumber;
+    }
+
     const response = await apiFetch('/api/invoices', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        client_id: parseInt(clientId, 10),
-        items,
-        vat_applies: vatApplies,
-        vat_rate_percent: vatRatePercent,
-      }),
+      body: JSON.stringify(payload),
     });
 
-    if (!response.ok) throw new Error('Failed to save invoice');
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      throw new Error(data.error || 'Failed to save invoice');
+    }
 
     const result = await response.json();
     showSuccess(`Invoice ${result.invoice_number} created successfully for ${result.client_name}`);

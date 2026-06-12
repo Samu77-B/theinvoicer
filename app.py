@@ -6,6 +6,7 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import datetime, timedelta
 from sqlalchemy import inspect, text
 import os
+import re
 
 from dotenv import load_dotenv
 
@@ -283,30 +284,90 @@ def _invoice_prefix(client_name: str) -> str:
     return prefix
 
 
+_INVOICE_NUM_RE = re.compile(r"^([A-Za-z]+)(\d+)$")
+
+
+def _parse_invoice_number(num: str):
+    m = _INVOICE_NUM_RE.match((num or "").strip())
+    if not m:
+        return None
+    return m.group(1).upper(), int(m.group(2))
+
+
+def _invoice_prefix_for_client(client: Client) -> str:
+    """Use the letter prefix from this client's highest numbered invoice, if any."""
+    rows = (
+        db.session.query(Invoice.invoice_number)
+        .filter(Invoice.client_id == client.id)
+        .all()
+    )
+    best_suffix = -1
+    best_prefix = None
+    for (num,) in rows:
+        parsed = _parse_invoice_number(num)
+        if not parsed:
+            continue
+        prefix, suffix = parsed
+        if suffix > best_suffix:
+            best_suffix = suffix
+            best_prefix = prefix
+    if best_prefix:
+        return best_prefix
+    return _invoice_prefix(client.name)
+
+
+def _format_next_invoice_number(prefix: str, next_suffix: int, existing_numbers: list) -> str:
+    width = 1
+    prefix_upper = prefix.upper()
+    for num in existing_numbers:
+        parsed = _parse_invoice_number(num)
+        if parsed and parsed[0].upper() == prefix_upper:
+            width = max(width, len(num) - len(parsed[0]))
+    next_str = str(next_suffix)
+    if len(next_str) < width:
+        next_str = next_str.zfill(width)
+    return f"{prefix}{next_str}"
+
+
 def generate_invoice_number(client: Client) -> str:
     """
     Generate the next invoice number for a client.
 
-    This uses the highest existing numeric suffix for the client's prefix, so
-    manual edits like TOX105 won't break subsequent numbering (next becomes TOX106).
+    Follows the letter prefix from existing invoices (e.g. TOX200 -> TOX201).
+    Falls back to a name-based prefix when the client has no invoices yet.
     """
-    prefix = _invoice_prefix(client.name)
-    existing = (
+    prefix = _invoice_prefix_for_client(client)
+    rows = (
         db.session.query(Invoice.invoice_number)
         .filter(Invoice.client_id == client.id)
-        .filter(Invoice.invoice_number.like(f"{prefix}%"))
         .all()
     )
-
+    numbers = [num for (num,) in rows]
+    prefix_upper = prefix.upper()
     max_suffix = 0
-    for (num,) in existing:
-        if not num or not num.startswith(prefix):
-            continue
-        suffix = num[len(prefix) :]
-        if suffix.isdigit():
-            max_suffix = max(max_suffix, int(suffix))
+    has_prefix = False
+    for num in numbers:
+        parsed = _parse_invoice_number(num)
+        if parsed and parsed[0].upper() == prefix_upper:
+            has_prefix = True
+            max_suffix = max(max_suffix, parsed[1])
+    if not has_prefix:
+        return f"{prefix}001"
+    return _format_next_invoice_number(prefix, max_suffix + 1, numbers)
 
-    return f"{prefix}{(max_suffix + 1):03d}"
+
+def _resolve_new_invoice_number(client: Client, custom: str | None):
+    custom = (custom or "").strip()
+    if custom:
+        exists = (
+            db.session.query(Invoice.id)
+            .filter(Invoice.invoice_number == custom)
+            .first()
+        )
+        if exists:
+            return None, "Invoice number already exists"
+        return custom, None
+    return generate_invoice_number(client), None
 
 
 def generate_quote_number(client: Client) -> str:
@@ -441,6 +502,14 @@ def handle_clients():
     return jsonify([_client_json(c) for c in clients])
 
 
+@app.route("/api/clients/<int:client_id>/next-invoice-number")
+def next_invoice_number(client_id):
+    client = db.session.get(Client, client_id)
+    if not client:
+        return jsonify({"error": "Not found"}), 404
+    return jsonify({"invoice_number": generate_invoice_number(client)})
+
+
 @app.route("/api/invoices", methods=["GET", "POST"])
 def handle_invoices():
     if request.method == "POST":
@@ -459,8 +528,14 @@ def handle_invoices():
         if vat_err:
             return jsonify({"error": vat_err}), 400
 
+        inv_number, num_err = _resolve_new_invoice_number(
+            client, data.get("invoice_number")
+        )
+        if num_err:
+            return jsonify({"error": num_err}), 409
+
         new_invoice = Invoice(
-            invoice_number=generate_invoice_number(client),
+            invoice_number=inv_number,
             client_id=client.id,
             date=datetime.utcnow(),
             vat_applies=vat_applies,

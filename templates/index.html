@@ -121,6 +121,11 @@
                 <option value="">Select a client…</option>
               </select>
             </div>
+            <div class="mb-3">
+              <label class="form-label" for="invoiceNumber">Invoice number</label>
+              <input type="text" class="form-control" id="invoiceNumber" name="invoice_number" placeholder="Leave blank to auto-generate" autocomplete="off">
+              <div class="form-text text-muted" id="invoiceNumberHint">Pick a client to see the next number, or enter your own (e.g. TOX200).</div>
+            </div>
             <label class="form-label">Line items</label>
             <div id="invoiceItems"></div>
             <button type="button" class="btn-apple btn-apple-ghost mt-2" onclick="addInvoiceItem()">
