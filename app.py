@@ -64,6 +64,7 @@ class Client(db.Model):
     email = db.Column(db.String(120), nullable=False)
     address = db.Column(db.String(200))
     invoices = db.relationship("Invoice", backref="client", lazy=True)
+    quotes = db.relationship("Quote", backref="client", lazy=True)
 
 
 class Invoice(db.Model):
@@ -84,6 +85,27 @@ class InvoiceItem(db.Model):
     description = db.Column(db.String(200), nullable=False)
     amount = db.Column(db.Float, nullable=False)
     invoice_id = db.Column(db.Integer, db.ForeignKey("invoice.id"), nullable=False)
+
+
+class Quote(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    quote_number = db.Column(db.String(20), unique=True, nullable=False)
+    date = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    client_id = db.Column(db.Integer, db.ForeignKey("client.id"), nullable=False)
+    items = db.relationship(
+        "QuoteItem", backref="quote", lazy=True, cascade="all, delete-orphan"
+    )
+    total_amount = db.Column(db.Float, nullable=False, default=0.0)
+    vat_applies = db.Column(db.Boolean, nullable=False, default=False)
+    vat_rate_percent = db.Column(db.Float, nullable=True)
+    vat_amount = db.Column(db.Float, nullable=False, default=0.0)
+
+
+class QuoteItem(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    description = db.Column(db.String(200), nullable=False)
+    amount = db.Column(db.Float, nullable=False)
+    quote_id = db.Column(db.Integer, db.ForeignKey("quote.id"), nullable=False)
 
 
 class User(db.Model):
@@ -202,6 +224,24 @@ def _invoice_dict(inv: Invoice):
     }
 
 
+def _quote_dict(quote: Quote):
+    subtotal = _net_subtotal_from_items(quote.items)
+    return {
+        "id": quote.id,
+        "quote_number": quote.quote_number,
+        "date": quote.date.strftime("%Y-%m-%d"),
+        "client": _client_json(quote.client),
+        "items": [
+            {"description": item.description, "amount": item.amount} for item in quote.items
+        ],
+        "subtotal_net": subtotal,
+        "vat_applies": bool(quote.vat_applies),
+        "vat_rate_percent": quote.vat_rate_percent,
+        "vat_amount": float(quote.vat_amount or 0.0),
+        "total_amount": quote.total_amount,
+    }
+
+
 def _parse_vat_from_payload(data: dict):
     vat_applies = bool(data.get("vat_applies", False))
     raw_rate = data.get("vat_rate_percent")
@@ -267,6 +307,27 @@ def generate_invoice_number(client: Client) -> str:
             max_suffix = max(max_suffix, int(suffix))
 
     return f"{prefix}{(max_suffix + 1):03d}"
+
+
+def generate_quote_number(client: Client) -> str:
+    prefix = _invoice_prefix(client.name)
+    q_prefix = f"{prefix}Q"
+    existing = (
+        db.session.query(Quote.quote_number)
+        .filter(Quote.client_id == client.id)
+        .filter(Quote.quote_number.like(f"{q_prefix}%"))
+        .all()
+    )
+
+    max_suffix = 0
+    for (num,) in existing:
+        if not num or not num.startswith(q_prefix):
+            continue
+        suffix = num[len(q_prefix) :]
+        if suffix.isdigit():
+            max_suffix = max(max_suffix, int(suffix))
+
+    return f"{q_prefix}{(max_suffix + 1):03d}"
 
 
 @app.route("/health")
@@ -429,7 +490,7 @@ def handle_invoices():
             }
         )
 
-    invoices = Invoice.query.all()
+    invoices = Invoice.query.order_by(Invoice.date.desc()).all()
     return jsonify([_invoice_dict(inv) for inv in invoices])
 
 
@@ -623,6 +684,264 @@ def duplicate_invoice(invoice_id):
             "id": new_invoice.id,
             "invoice_number": new_invoice.invoice_number,
             "client_name": client.name,
+        }
+    )
+
+
+@app.route("/api/quotes", methods=["GET", "POST"])
+def handle_quotes():
+    if request.method == "POST":
+        data = request.json or {}
+        client = db.session.get(Client, data.get("client_id"))
+        if not client:
+            return jsonify({"error": "Client not found"}), 404
+
+        vat_applies, vat_rate, vat_err = _parse_vat_from_payload(data)
+        if vat_err:
+            return jsonify({"error": vat_err}), 400
+
+        new_quote = Quote(
+            quote_number=generate_quote_number(client),
+            client_id=client.id,
+            date=datetime.utcnow(),
+            vat_applies=vat_applies,
+            vat_rate_percent=vat_rate if vat_applies else None,
+        )
+
+        for item_data in data.get("items", []):
+            new_quote.items.append(
+                QuoteItem(
+                    description=item_data["description"],
+                    amount=float(item_data["amount"]),
+                )
+            )
+
+        net = _net_subtotal_from_items(new_quote.items)
+        vat_amt, gross = _vat_amount_and_total(net, vat_applies, vat_rate)
+        new_quote.vat_amount = vat_amt if vat_applies else 0.0
+        new_quote.total_amount = gross
+        db.session.add(new_quote)
+        db.session.commit()
+
+        return jsonify(
+            {
+                "id": new_quote.id,
+                "quote_number": new_quote.quote_number,
+                "client_name": client.name,
+                "message": "Quote created successfully",
+            }
+        )
+
+    quotes = Quote.query.order_by(Quote.date.desc()).all()
+    return jsonify([_quote_dict(q) for q in quotes])
+
+
+@app.route("/api/quotes/<int:quote_id>", methods=["GET", "PUT", "DELETE"])
+def handle_quote(quote_id):
+    quote = db.session.get(Quote, quote_id)
+    if not quote:
+        return jsonify({"error": "Not found"}), 404
+
+    if request.method == "GET":
+        return jsonify(_quote_dict(quote))
+
+    if request.method == "PUT":
+        data = request.json or {}
+        new_number = (data.get("quote_number") or "").strip()
+        if new_number and new_number != quote.quote_number:
+            exists = (
+                db.session.query(Quote.id)
+                .filter(Quote.quote_number == new_number)
+                .filter(Quote.id != quote.id)
+                .first()
+            )
+            if exists:
+                return jsonify({"error": "Quote number already exists"}), 409
+            quote.quote_number = new_number
+
+        merged = {**data}
+        if "vat_applies" not in merged:
+            merged["vat_applies"] = quote.vat_applies
+        if (
+            merged.get("vat_applies")
+            and merged.get("vat_rate_percent") is None
+            and quote.vat_rate_percent is not None
+        ):
+            merged["vat_rate_percent"] = quote.vat_rate_percent
+
+        vat_applies, vat_rate, vat_err = _parse_vat_from_payload(merged)
+        if vat_err:
+            return jsonify({"error": vat_err}), 400
+        quote.vat_applies = vat_applies
+        quote.vat_rate_percent = vat_rate if vat_applies else None
+
+        QuoteItem.query.filter_by(quote_id=quote.id).delete()
+
+        items_buffer = []
+        for item_data in data.get("items", []):
+            item = QuoteItem(
+                description=item_data["description"],
+                amount=float(item_data["amount"]),
+                quote_id=quote.id,
+            )
+            items_buffer.append(item)
+            db.session.add(item)
+
+        net = _net_subtotal_from_items(
+            [{"amount": i.amount, "description": i.description} for i in items_buffer]
+        )
+        vat_amt, gross = _vat_amount_and_total(net, vat_applies, vat_rate)
+        quote.vat_amount = vat_amt if vat_applies else 0.0
+        quote.total_amount = gross
+        db.session.commit()
+        return jsonify({"message": "Quote updated successfully"})
+
+    QuoteItem.query.filter_by(quote_id=quote.id).delete()
+    db.session.delete(quote)
+    db.session.commit()
+    return jsonify({"message": "Quote deleted successfully"})
+
+
+@app.route("/api/quotes/<int:quote_id>/send", methods=["POST"])
+def send_quote_email(quote_id):
+    api_key = os.environ.get("RESEND_API_KEY")
+    from_email = os.environ.get("RESEND_FROM_EMAIL")
+    if not api_key or not from_email:
+        return jsonify(
+            {
+                "success": False,
+                "error": "RESEND_API_KEY and RESEND_FROM_EMAIL must be set on the server.",
+            }
+        ), 503
+
+    quote = db.session.get(Quote, quote_id)
+    if not quote:
+        return jsonify({"success": False, "error": "Quote not found"}), 404
+
+    client = quote.client
+    if not (client.email or "").strip():
+        return jsonify({"success": False, "error": "Client has no email address"}), 400
+
+    data = request.get_json(silent=True) or {}
+    message = (data.get("message") or "").strip()
+    if len(message) > 4000:
+        message = message[:4000]
+
+    try:
+        import resend
+
+        resend.api_key = api_key
+        logo_url = request.url_root.rstrip("/") + url_for("static", filename="logo.png")
+        html = render_template(
+            "email_quote.html",
+            quote=quote,
+            message=message or None,
+            logo_url=logo_url,
+            subtotal_net=_net_subtotal_from_items(quote.items),
+        )
+        params = {
+            "from": from_email,
+            "to": [client.email.strip()],
+            "subject": f"Quote {quote.quote_number}",
+            "html": html,
+        }
+        result = resend.Emails.send(params)
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+    return jsonify({"success": True, "id": result.get("id") if isinstance(result, dict) else None})
+
+
+@app.route("/api/quotes/<int:quote_id>/duplicate", methods=["POST"])
+def duplicate_quote(quote_id):
+    quote = db.session.get(Quote, quote_id)
+    if not quote:
+        return jsonify({"success": False, "error": "Quote not found"}), 404
+
+    client = quote.client
+    if not client:
+        return jsonify({"success": False, "error": "Client not found"}), 404
+
+    vat_applies = bool(quote.vat_applies)
+    vat_rate = quote.vat_rate_percent if vat_applies else None
+
+    new_quote = Quote(
+        quote_number=generate_quote_number(client),
+        client_id=client.id,
+        date=datetime.utcnow(),
+        vat_applies=vat_applies,
+        vat_rate_percent=vat_rate if vat_applies else None,
+    )
+
+    for item in quote.items:
+        new_quote.items.append(
+            QuoteItem(description=item.description, amount=float(item.amount))
+        )
+
+    net = _net_subtotal_from_items(new_quote.items)
+    vat_amt, gross = _vat_amount_and_total(net, vat_applies, vat_rate)
+    new_quote.vat_amount = vat_amt if vat_applies else 0.0
+    new_quote.total_amount = gross
+    db.session.add(new_quote)
+    db.session.commit()
+
+    return jsonify(
+        {
+            "success": True,
+            "id": new_quote.id,
+            "quote_number": new_quote.quote_number,
+            "client_name": client.name,
+        }
+    )
+
+
+@app.route("/api/quotes/<int:quote_id>/convert-to-invoice", methods=["POST"])
+def convert_quote_to_invoice(quote_id):
+    quote = db.session.get(Quote, quote_id)
+    if not quote:
+        return jsonify({"success": False, "error": "Quote not found"}), 404
+
+    client = quote.client
+    if not client:
+        return jsonify({"success": False, "error": "Client not found"}), 404
+
+    client_folder = os.path.join(
+        app.config["INVOICE_FOLDER"], client.name.replace(" ", "_")
+    )
+    if not os.path.exists(client_folder):
+        os.makedirs(client_folder)
+
+    vat_applies = bool(quote.vat_applies)
+    vat_rate = quote.vat_rate_percent if vat_applies else None
+
+    new_invoice = Invoice(
+        invoice_number=generate_invoice_number(client),
+        client_id=client.id,
+        date=datetime.utcnow(),
+        paid=False,
+        vat_applies=vat_applies,
+        vat_rate_percent=vat_rate if vat_applies else None,
+    )
+
+    for item in quote.items:
+        new_invoice.items.append(
+            InvoiceItem(description=item.description, amount=float(item.amount))
+        )
+
+    net = _net_subtotal_from_items(new_invoice.items)
+    vat_amt, gross = _vat_amount_and_total(net, vat_applies, vat_rate)
+    new_invoice.vat_amount = vat_amt if vat_applies else 0.0
+    new_invoice.total_amount = gross
+    db.session.add(new_invoice)
+    db.session.commit()
+
+    return jsonify(
+        {
+            "success": True,
+            "id": new_invoice.id,
+            "invoice_number": new_invoice.invoice_number,
+            "client_name": client.name,
+            "quote_number": quote.quote_number,
         }
     )
 

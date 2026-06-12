@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Quote {{ quote.quote_number }}</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 14px; line-height: 1.45; color: #222; max-width: 640px; margin: 0 auto; padding: 24px; }
+    .header { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; border-bottom: 1px solid #e5e5e5; padding-bottom: 16px; margin-bottom: 16px; }
+    .brand { display: flex; align-items: flex-start; gap: 12px; min-width: 0; }
+    .logo { width: 56px; height: 56px; display: block; flex-shrink: 0; }
+    .meta { text-align: right; }
+    h1 { font-size: 22px; margin: 0 0 8px 0; letter-spacing: 0.05em; }
+    h2 { font-size: 18px; margin: 0 0 8px 0; }
+    table { width: 100%; border-collapse: collapse; margin: 12px 0 16px; }
+    th, td { border: 1px solid #ddd; padding: 10px 12px; text-align: left; }
+    th { background: #f9f9f9; }
+    .amt { text-align: right; }
+    .total td { font-weight: bold; }
+    .footer { margin-top: 28px; padding-top: 16px; border-top: 1px solid #e5e5e5; font-size: 13px; }
+    .muted { color: #555; }
+    .note { margin: 0 0 20px 0; padding: 12px 14px; background: #f7f7f7; border: 1px solid #e5e5e5; border-radius: 8px; white-space: pre-wrap; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div class="brand">
+      <img class="logo" src="{{ logo_url }}" alt="" width="56" height="56">
+      <div>
+        <h2>Paul Banning</h2>
+        <p class="muted">48 Pellipar Close, London N13 4AG<br>07730 556097</p>
+      </div>
+    </div>
+    <div class="meta">
+      <h1>QUOTE</h1>
+      <p><strong>Quote #:</strong> {{ quote.quote_number }}<br>
+      <strong>Date:</strong> {{ quote.date.strftime('%d/%m/%Y') }}</p>
+    </div>
+  </div>
+
+  {% if message %}
+  <p class="note">{{ message }}</p>
+  {% endif %}
+
+  <p><strong>Prepared for</strong></p>
+  <p>{{ quote.client.name }}<br>
+  {% if quote.client.address %}{{ quote.client.address }}<br>{% endif %}
+  <span class="muted">{{ quote.client.email }}</span></p>
+
+  <table>
+    <thead>
+      <tr><th>Description</th><th class="amt">{% if quote.vat_applies %}Amount (net){% else %}Amount{% endif %}</th></tr>
+    </thead>
+    <tbody>
+      {% for item in quote.items %}
+      <tr>
+        <td>{{ item.description }}</td>
+        <td class="amt">&pound;{{ '%.2f'|format(item.amount) }}</td>
+      </tr>
+      {% endfor %}
+      {% if quote.vat_applies %}
+      <tr>
+        <td>Subtotal (net)</td>
+        <td class="amt">&pound;{{ '%.2f'|format(subtotal_net) }}</td>
+      </tr>
+      <tr>
+        <td>VAT ({{ '%.2f'|format(quote.vat_rate_percent or 0) }}%)</td>
+        <td class="amt">&pound;{{ '%.2f'|format(quote.vat_amount or 0) }}</td>
+      </tr>
+      {% endif %}
+      <tr class="total">
+        <td>{% if quote.vat_applies %}Total quoted{% else %}Total{% endif %}</td>
+        <td class="amt">&pound;{{ '%.2f'|format(quote.total_amount) }}</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="footer">
+    <p><strong>Terms</strong><br>This quote is valid for 30 days from the date shown. Prices are subject to availability and may be revised after this period.</p>
+    <p class="muted">If you would like to proceed, please reply to confirm and we will issue an invoice.</p>
+  </div>
+</body>
+</html>

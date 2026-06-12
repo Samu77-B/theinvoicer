@@ -1,8 +1,13 @@
 let previewInvoiceId = null;
+let previewQuoteId = null;
+let allInvoices = [];
+let invoicePaidFilter = 'unpaid';
+let activeSection = 'invoices';
 
 document.addEventListener('DOMContentLoaded', () => {
   loadClients();
   loadInvoices();
+  loadQuotes();
   addInvoiceItem();
 
   const vatCb = document.getElementById('invoiceVatApplies');
@@ -12,6 +17,14 @@ document.addEventListener('DOMContentLoaded', () => {
   const editVatCb = document.getElementById('editInvoiceVatApplies');
   if (editVatCb) {
     editVatCb.addEventListener('change', syncEditInvoiceVatUi);
+  }
+  const quoteVatCb = document.getElementById('quoteVatApplies');
+  if (quoteVatCb) {
+    quoteVatCb.addEventListener('change', syncQuoteVatUi);
+  }
+  const editQuoteVatCb = document.getElementById('editQuoteVatApplies');
+  if (editQuoteVatCb) {
+    editQuoteVatCb.addEventListener('change', syncEditQuoteVatUi);
   }
 
   const newInvModal = document.getElementById('newInvoiceModal');
@@ -26,6 +39,21 @@ document.addEventListener('DOMContentLoaded', () => {
       if (vatCheck) vatCheck.checked = false;
       if (vatRate) vatRate.value = '20';
       syncInvoiceVatUi();
+    });
+  }
+
+  const newQuoteModal = document.getElementById('newQuoteModal');
+  if (newQuoteModal) {
+    newQuoteModal.addEventListener('shown.bs.modal', () => {
+      const box = document.getElementById('quoteItems');
+      if (box && box.children.length === 0) {
+        addQuoteItem();
+      }
+      const vatCheck = document.getElementById('quoteVatApplies');
+      const vatRate = document.getElementById('quoteVatRate');
+      if (vatCheck) vatCheck.checked = false;
+      if (vatRate) vatRate.value = '20';
+      syncQuoteVatUi();
     });
   }
 
@@ -70,6 +98,62 @@ function syncEditInvoiceVatUi() {
   const cb = document.getElementById('editInvoiceVatApplies');
   const wrap = document.getElementById('editInvoiceVatRateWrap');
   if (cb && wrap) wrap.style.display = cb.checked ? 'block' : 'none';
+}
+
+function syncQuoteVatUi() {
+  const cb = document.getElementById('quoteVatApplies');
+  const wrap = document.getElementById('quoteVatRateWrap');
+  if (cb && wrap) wrap.style.display = cb.checked ? 'block' : 'none';
+}
+
+function syncEditQuoteVatUi() {
+  const cb = document.getElementById('editQuoteVatApplies');
+  const wrap = document.getElementById('editQuoteVatRateWrap');
+  if (cb && wrap) wrap.style.display = cb.checked ? 'block' : 'none';
+}
+
+function switchSection(section) {
+  activeSection = section;
+  const invoicesSection = document.getElementById('invoicesSection');
+  const quotesSection = document.getElementById('quotesSection');
+  const tabInvoices = document.getElementById('tabInvoices');
+  const tabQuotes = document.getElementById('tabQuotes');
+  const btnNewInvoice = document.getElementById('btnNewInvoice');
+  const btnNewQuote = document.getElementById('btnNewQuote');
+
+  const isInvoices = section === 'invoices';
+  if (invoicesSection) invoicesSection.classList.toggle('d-none', !isInvoices);
+  if (quotesSection) quotesSection.classList.toggle('d-none', isInvoices);
+  if (tabInvoices) {
+    tabInvoices.classList.toggle('is-active', isInvoices);
+    tabInvoices.setAttribute('aria-selected', isInvoices ? 'true' : 'false');
+  }
+  if (tabQuotes) {
+    tabQuotes.classList.toggle('is-active', !isInvoices);
+    tabQuotes.setAttribute('aria-selected', !isInvoices ? 'true' : 'false');
+  }
+  if (btnNewInvoice) btnNewInvoice.classList.toggle('d-none', !isInvoices);
+  if (btnNewQuote) btnNewQuote.classList.toggle('d-none', isInvoices);
+}
+
+function switchInvoiceFilter(filter) {
+  invoicePaidFilter = filter;
+  const filterUnpaid = document.getElementById('filterUnpaid');
+  const filterPaid = document.getElementById('filterPaid');
+  const heading = document.getElementById('invoicesHeading');
+
+  if (filterUnpaid) {
+    filterUnpaid.classList.toggle('is-active', filter === 'unpaid');
+    filterUnpaid.setAttribute('aria-selected', filter === 'unpaid' ? 'true' : 'false');
+  }
+  if (filterPaid) {
+    filterPaid.classList.toggle('is-active', filter === 'paid');
+    filterPaid.setAttribute('aria-selected', filter === 'paid' ? 'true' : 'false');
+  }
+  if (heading) {
+    heading.textContent = filter === 'paid' ? 'Paid invoices' : 'Unpaid invoices';
+  }
+  renderInvoicesList();
 }
 
 function setReportPeriodUI(period) {
@@ -135,15 +219,19 @@ async function loadClients() {
     if (!response.ok) throw new Error('Failed to load clients');
     const clients = await response.json();
 
-    const clientSelect = document.querySelector('select[name="client_id"]');
-    if (!clientSelect) return;
-    clientSelect.innerHTML = '<option value="">Select a client…</option>';
+    const selects = [
+      document.querySelector('#invoiceForm select[name="client_id"]'),
+      document.getElementById('quoteClient'),
+    ].filter(Boolean);
 
-    clients.forEach((client) => {
-      const option = document.createElement('option');
-      option.value = client.id;
-      option.textContent = client.name;
-      clientSelect.appendChild(option);
+    selects.forEach((clientSelect) => {
+      clientSelect.innerHTML = '<option value="">Select a client…</option>';
+      clients.forEach((client) => {
+        const option = document.createElement('option');
+        option.value = client.id;
+        option.textContent = client.name;
+        clientSelect.appendChild(option);
+      });
     });
   } catch (error) {
     showError('Failed to load clients: ' + error.message);
@@ -520,20 +608,32 @@ async function loadInvoices() {
   try {
     const response = await apiFetch('/api/invoices');
     if (!response.ok) throw new Error('Failed to load invoices');
-    const invoices = await response.json();
+    allInvoices = await response.json();
+    renderInvoicesList();
+  } catch (error) {
+    showError('Failed to load invoices: ' + error.message);
+  }
+}
 
-    const list = document.getElementById('invoicesList');
-    list.innerHTML = '';
+function renderInvoicesList() {
+  const list = document.getElementById('invoicesList');
+  if (!list) return;
+  list.innerHTML = '';
 
-    if (invoices.length === 0) {
-      list.innerHTML = '<div class="empty-state">No invoices yet. Create a client, then make your first invoice.</div>';
-      return;
-    }
+  const invoices = allInvoices.filter((invoice) =>
+    invoicePaidFilter === 'paid' ? invoice.paid : !invoice.paid
+  );
 
-    invoices.forEach((invoice) => {
-      const item = document.createElement('div');
-      item.className = 'invoice-card';
-      item.innerHTML = `
+  if (invoices.length === 0) {
+    const label = invoicePaidFilter === 'paid' ? 'paid' : 'unpaid';
+    list.innerHTML = `<div class="empty-state">No ${label} invoices yet.</div>`;
+    return;
+  }
+
+  invoices.forEach((invoice) => {
+    const item = document.createElement('div');
+    item.className = 'invoice-card';
+    item.innerHTML = `
                 <div class="invoice-card-main">
                     <p class="invoice-card-title">${escapeHtml(invoice.invoice_number)} — ${escapeHtml(invoice.client.name)}</p>
                     <p class="invoice-card-meta">Date: ${escapeHtml(formatUkDate(invoice.date))}</p>
@@ -565,11 +665,8 @@ async function loadInvoices() {
                     </button>
                 </div>
             `;
-      list.appendChild(item);
-    });
-  } catch (error) {
-    showError('Failed to load invoices: ' + error.message);
-  }
+    list.appendChild(item);
+  });
 }
 
 async function togglePaidStatus(invoiceId, isPaid) {
@@ -651,6 +748,494 @@ function printInvoice() {
 
 function savePDF() {
   printInvoice();
+}
+
+function addQuoteItem() {
+  const container = document.getElementById('quoteItems');
+  const newItem = document.createElement('div');
+  newItem.className = 'line-item-row';
+  newItem.innerHTML = `
+        <div class="line-item-desc">
+          <input type="text" class="form-control" name="description[]" placeholder="Description" required>
+        </div>
+        <div class="line-item-amt">
+          <input type="number" step="0.01" class="form-control" name="amount[]" placeholder="0.00" required>
+        </div>
+        <div class="line-item-rm">
+          <button type="button" class="btn-remove-line" aria-label="Remove line" onclick="this.parentElement.parentElement.remove()">×</button>
+        </div>
+    `;
+  container.appendChild(newItem);
+}
+
+async function saveQuote() {
+  try {
+    const form = document.getElementById('quoteForm');
+    if (!form.checkValidity()) {
+      form.reportValidity();
+      return;
+    }
+
+    const clientId = form.querySelector('select[name="client_id"]').value;
+    if (!clientId) {
+      showError('Please select a client');
+      return;
+    }
+
+    const descriptions = Array.from(form.querySelectorAll('#quoteItems input[name="description[]"]')).map((input) => input.value);
+    const amounts = Array.from(form.querySelectorAll('#quoteItems input[name="amount[]"]')).map((input) => parseFloat(input.value));
+
+    if (descriptions.length === 0) {
+      showError('Please add at least one line item');
+      return;
+    }
+
+    const items = descriptions.map((description, index) => ({
+      description,
+      amount: amounts[index],
+    }));
+
+    const vatApplies = document.getElementById('quoteVatApplies')?.checked || false;
+    const vatRateRaw = document.getElementById('quoteVatRate')?.value;
+    const vatRatePercent = vatApplies ? parseFloat(vatRateRaw) : undefined;
+    if (vatApplies && (Number.isNaN(vatRatePercent) || vatRatePercent < 0 || vatRatePercent > 100)) {
+      showError('Enter a valid VAT rate between 0 and 100');
+      return;
+    }
+
+    const response = await apiFetch('/api/quotes', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        client_id: parseInt(clientId, 10),
+        items,
+        vat_applies: vatApplies,
+        vat_rate_percent: vatRatePercent,
+      }),
+    });
+
+    if (!response.ok) throw new Error('Failed to save quote');
+
+    const result = await response.json();
+    showSuccess(`Quote ${result.quote_number} created successfully for ${result.client_name}`);
+    form.reset();
+    document.getElementById('quoteItems').innerHTML = '';
+    addQuoteItem();
+    bootstrap.Modal.getInstance(document.getElementById('newQuoteModal')).hide();
+    switchSection('quotes');
+    loadQuotes();
+  } catch (error) {
+    showError('Failed to save quote: ' + error.message);
+  }
+}
+
+function renderQuotePreviewHtml(quote) {
+  const addr = (quote.client.address || '').trim();
+  const billToLines = [escapeHtml(quote.client.name)];
+  if (addr) billToLines.push(escapeHtml(addr).replace(/\n/g, '<br>'));
+  billToLines.push(`<span class="text-muted">${escapeHtml(quote.client.email)}</span>`);
+
+  const rows = quote.items
+    .map(
+      (item) => `
+                    <tr>
+                        <td>${escapeHtml(item.description)}</td>
+                        <td class="text-end">£${Number(item.amount).toFixed(2)}</td>
+                    </tr>`
+    )
+    .join('');
+
+  const subtotal =
+    quote.subtotal_net != null
+      ? Number(quote.subtotal_net)
+      : quote.items.reduce((s, item) => s + Number(item.amount), 0);
+  const vatApplies = !!quote.vat_applies;
+  const amtHeading = vatApplies ? 'Amount (net)' : 'Amount';
+  const vatRows = vatApplies
+    ? `
+                <tr>
+                    <td class="text-end" style="border-left: none; border-bottom: none;">Subtotal (net)</td>
+                    <td class="text-end">£${subtotal.toFixed(2)}</td>
+                </tr>
+                <tr>
+                    <td class="text-end" style="border-left: none; border-bottom: none;">VAT (${Number(
+                      quote.vat_rate_percent ?? 20
+                    ).toFixed(2)}%)</td>
+                    <td class="text-end">£${Number(quote.vat_amount || 0).toFixed(2)}</td>
+                </tr>`
+    : '';
+  const totalLabel = vatApplies ? 'Total quoted' : 'Total';
+
+  return `
+        <div class="invoice-header">
+            <div class="invoice-header-left">
+                <img src="/static/logo.png" alt="" class="invoice-logo" width="56" height="56">
+                <div class="invoice-from">
+                    <h2>Paul Banning</h2>
+                    <p>48 Pellipar Close<br>
+                    London N13 4AG<br>
+                    07730 556097</p>
+                </div>
+            </div>
+            <div class="text-end">
+                <h1>QUOTE</h1>
+                <p>Quote #: ${escapeHtml(quote.quote_number)}<br>
+                Date: ${escapeHtml(formatUkDate(quote.date))}</p>
+            </div>
+        </div>
+
+        <div class="invoice-details">
+            <h4>Prepared for</h4>
+            <p>${billToLines.join('<br>')}</p>
+        </div>
+
+        <table class="invoice-items">
+            <thead>
+                <tr>
+                    <th style="width: 70%">Description</th>
+                    <th style="width: 30%" class="text-end">${amtHeading}</th>
+                </tr>
+            </thead>
+            <tbody>
+                ${rows}
+                ${vatRows}
+                <tr>
+                    <td class="text-end" style="border-left: none; border-bottom: none;"><strong>${totalLabel}</strong></td>
+                    <td class="text-end"><strong>£${Number(quote.total_amount).toFixed(2)}</strong></td>
+                </tr>
+            </tbody>
+        </table>
+
+        <div class="invoice-terms">
+            <h5>Terms</h5>
+            <p>This quote is valid for 30 days from the date shown. Prices are subject to availability and may be revised after this period.</p>
+            <p>If you would like to proceed, please reply to confirm and we will issue an invoice.</p>
+        </div>
+    `;
+}
+
+async function openQuotePreview(quoteId) {
+  try {
+    const response = await apiFetch(`/api/quotes/${quoteId}`);
+    if (!response.ok) throw new Error('Failed to load quote');
+    const quote = await response.json();
+    previewQuoteId = quote.id;
+
+    const msg = document.getElementById('quoteEmailMessage');
+    if (msg) msg.value = '';
+
+    const preview = document.getElementById('quotePreview');
+    preview.className = 'invoice-preview';
+    preview.innerHTML = renderQuotePreviewHtml(quote);
+
+    const modal = new bootstrap.Modal(document.getElementById('quotePreviewModal'));
+    modal.show();
+  } catch (error) {
+    showError('Failed to open preview: ' + error.message);
+  }
+}
+
+async function openEditQuote(quoteId) {
+  try {
+    const response = await apiFetch(`/api/quotes/${quoteId}`);
+    if (!response.ok) throw new Error('Failed to load quote');
+    const quote = await response.json();
+
+    const form = document.getElementById('editQuoteForm');
+    form.querySelector('input[name="quote_id"]').value = quote.id;
+    form.querySelector('input[name="quote_number"]').value = quote.quote_number;
+    form.querySelector('input[name="client_name"]').value = quote.client.name;
+
+    const itemsContainer = document.getElementById('editQuoteItems');
+    itemsContainer.innerHTML = `
+            <div class="row mb-2">
+                <div class="col-8">
+                    <label class="form-label">Description</label>
+                </div>
+                <div class="col-4">
+                    <label class="form-label">Amount (£)</label>
+                </div>
+            </div>
+        `;
+
+    quote.items.forEach((item) => addEditQuoteItem(item));
+
+    const ev = document.getElementById('editQuoteVatApplies');
+    const er = document.getElementById('editQuoteVatRate');
+    if (ev) ev.checked = !!quote.vat_applies;
+    if (er) {
+      er.value =
+        quote.vat_applies && quote.vat_rate_percent != null
+          ? String(quote.vat_rate_percent)
+          : '20';
+    }
+    syncEditQuoteVatUi();
+
+    const modal = new bootstrap.Modal(document.getElementById('editQuoteModal'));
+    modal.show();
+  } catch (error) {
+    showError('Failed to edit quote: ' + error.message);
+  }
+}
+
+function addEditQuoteItem(item = null) {
+  const container = document.getElementById('editQuoteItems');
+  const newItem = document.createElement('div');
+  newItem.className = 'line-item-row';
+  newItem.innerHTML = `
+        <div class="line-item-desc">
+          <input type="text" class="form-control" name="description[]" placeholder="Description" required>
+        </div>
+        <div class="line-item-amt">
+          <input type="number" step="0.01" class="form-control" name="amount[]" placeholder="0.00" required>
+        </div>
+        <div class="line-item-rm">
+          <button type="button" class="btn-remove-line" aria-label="Remove line" onclick="this.parentElement.parentElement.remove()">×</button>
+        </div>
+    `;
+  const descInput = newItem.querySelector('input[name="description[]"]');
+  const amtInput = newItem.querySelector('input[name="amount[]"]');
+  if (item) {
+    descInput.value = item.description;
+    amtInput.value = item.amount;
+  }
+  container.appendChild(newItem);
+}
+
+async function updateQuote() {
+  try {
+    const form = document.getElementById('editQuoteForm');
+    const quoteId = form.querySelector('input[name="quote_id"]').value;
+    const quoteNumber = (form.querySelector('input[name="quote_number"]').value || '').trim();
+    const descriptions = Array.from(form.querySelectorAll('#editQuoteItems input[name="description[]"]')).map((input) => input.value);
+    const amounts = Array.from(form.querySelectorAll('#editQuoteItems input[name="amount[]"]')).map((input) => parseFloat(input.value));
+
+    const items = descriptions.map((description, index) => ({
+      description,
+      amount: amounts[index],
+    }));
+
+    const vatApplies = document.getElementById('editQuoteVatApplies')?.checked || false;
+    const vatRateRaw = document.getElementById('editQuoteVatRate')?.value;
+    const vatRatePercent = vatApplies ? parseFloat(vatRateRaw) : undefined;
+    if (vatApplies && (Number.isNaN(vatRatePercent) || vatRatePercent < 0 || vatRatePercent > 100)) {
+      showError('Enter a valid VAT rate between 0 and 100');
+      return;
+    }
+
+    const response = await apiFetch(`/api/quotes/${quoteId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        items,
+        quote_number: quoteNumber,
+        vat_applies: vatApplies,
+        vat_rate_percent: vatRatePercent,
+      }),
+    });
+
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      throw new Error(data.error || 'Failed to update quote');
+    }
+
+    showSuccess('Quote updated successfully');
+    bootstrap.Modal.getInstance(document.getElementById('editQuoteModal')).hide();
+    loadQuotes();
+  } catch (error) {
+    showError('Failed to update quote: ' + error.message);
+  }
+}
+
+async function deleteQuote(quoteId) {
+  if (!confirm('Are you sure you want to delete this quote?')) return;
+
+  try {
+    const response = await apiFetch(`/api/quotes/${quoteId}`, {
+      method: 'DELETE',
+    });
+
+    if (!response.ok) throw new Error('Failed to delete quote');
+
+    showSuccess('Quote deleted successfully');
+    loadQuotes();
+  } catch (error) {
+    showError('Failed to delete quote: ' + error.message);
+  }
+}
+
+async function duplicateQuote(quoteId) {
+  try {
+    const response = await apiFetch(`/api/quotes/${quoteId}/duplicate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(data.error || 'Failed to duplicate quote');
+    }
+    showSuccess(`Duplicated as ${data.quote_number}`);
+    await loadQuotes();
+    if (data.id) {
+      openEditQuote(data.id);
+    }
+  } catch (error) {
+    showError(error.message || 'Failed to duplicate quote');
+  }
+}
+
+async function convertQuoteToInvoice(quoteId) {
+  const id = quoteId || previewQuoteId;
+  if (!id) {
+    showError('Select a quote first');
+    return;
+  }
+  if (!confirm('Create a new unpaid invoice from this quote?')) return;
+
+  try {
+    const response = await apiFetch(`/api/quotes/${id}/convert-to-invoice`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(data.error || 'Failed to convert quote');
+    }
+
+    const previewModal = document.getElementById('quotePreviewModal');
+    const modalInstance = previewModal ? bootstrap.Modal.getInstance(previewModal) : null;
+    if (modalInstance) modalInstance.hide();
+
+    showSuccess(`Quote ${data.quote_number} converted to invoice ${data.invoice_number}`);
+    switchSection('invoices');
+    switchInvoiceFilter('unpaid');
+    await loadInvoices();
+    if (data.id) {
+      openEditInvoice(data.id);
+    }
+  } catch (error) {
+    showError(error.message || 'Failed to convert quote');
+  }
+}
+
+async function loadQuotes() {
+  try {
+    const response = await apiFetch('/api/quotes');
+    if (!response.ok) throw new Error('Failed to load quotes');
+    const quotes = await response.json();
+
+    const list = document.getElementById('quotesList');
+    if (!list) return;
+    list.innerHTML = '';
+
+    if (quotes.length === 0) {
+      list.innerHTML = '<div class="empty-state">No quotes yet. Create a client, then make your first quote.</div>';
+      return;
+    }
+
+    quotes.forEach((quote) => {
+      const item = document.createElement('div');
+      item.className = 'invoice-card';
+      item.innerHTML = `
+                <div class="invoice-card-main">
+                    <p class="invoice-card-title">${escapeHtml(quote.quote_number)} — ${escapeHtml(quote.client.name)}</p>
+                    <p class="invoice-card-meta">Date: ${escapeHtml(formatUkDate(quote.date))}</p>
+                    ${
+                      quote.vat_applies
+                        ? `<p class="invoice-card-vat">VAT ${Number(quote.vat_rate_percent ?? 20).toFixed(2)}% · Net £${Number(
+                            quote.subtotal_net ?? 0
+                          ).toFixed(2)}</p>`
+                        : ''
+                    }
+                    <p class="invoice-card-amount">£${Number(quote.total_amount).toFixed(2)}</p>
+                </div>
+                <div class="invoice-card-actions">
+                    <button type="button" class="btn-apple-icon" title="Preview" aria-label="Preview" onclick="openQuotePreview(${quote.id})">
+                        <i class="fas fa-eye"></i>
+                    </button>
+                    <button type="button" class="btn-apple-icon" title="Edit" aria-label="Edit" onclick="openEditQuote(${quote.id})">
+                        <i class="fas fa-pen"></i>
+                    </button>
+                    <button type="button" class="btn-apple-icon" title="Duplicate" aria-label="Duplicate" onclick="duplicateQuote(${quote.id})">
+                        <i class="fas fa-copy"></i>
+                    </button>
+                    <button type="button" class="btn-apple-icon" title="Convert to invoice" aria-label="Convert to invoice" onclick="convertQuoteToInvoice(${quote.id})">
+                        <i class="fas fa-file-invoice"></i>
+                    </button>
+                    <button type="button" class="btn-apple-icon is-danger" title="Delete" aria-label="Delete" onclick="deleteQuote(${quote.id})">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </div>
+            `;
+      list.appendChild(item);
+    });
+  } catch (error) {
+    showError('Failed to load quotes: ' + error.message);
+  }
+}
+
+async function sendQuoteEmail() {
+  if (!previewQuoteId) {
+    showError('Open a quote preview first');
+    return;
+  }
+  const btn = document.getElementById('btnSendQuote');
+  if (btn) {
+    btn.disabled = true;
+  }
+  try {
+    const msgEl = document.getElementById('quoteEmailMessage');
+    const message = (msgEl?.value || '').trim();
+    const response = await apiFetch(`/api/quotes/${previewQuoteId}/send`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message }),
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(data.error || 'Send failed');
+    }
+    showSuccess('Quote sent to client email');
+  } catch (error) {
+    showError(error.message || 'Failed to send email');
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+function printQuote() {
+  const el = document.querySelector('#quotePreviewModal .invoice-preview');
+  if (!el) return;
+
+  const quoteContent = el.cloneNode(true);
+  const printContainer = document.createElement('div');
+  printContainer.className = 'print-container';
+  printContainer.style.cssText = `
+        position: fixed;
+        left: 0;
+        top: 0;
+        width: 100%;
+        max-width: 210mm;
+        height: auto;
+        min-height: 0;
+        padding: 0;
+        margin: 0;
+        background-color: white;
+        z-index: 9999;
+        overflow: visible;
+    `;
+
+  printContainer.appendChild(quoteContent);
+  document.body.appendChild(printContainer);
+
+  setTimeout(() => {
+    window.print();
+    document.body.removeChild(printContainer);
+  }, 200);
+}
+
+function saveQuotePDF() {
+  printQuote();
 }
 
 function showSuccess(message) {
