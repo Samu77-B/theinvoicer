@@ -257,6 +257,27 @@ def _parse_vat_from_payload(data: dict):
     return vat_applies, rate, None
 
 
+def _parse_line_items(items_data):
+    if not items_data:
+        return None, "At least one line item is required"
+    parsed = []
+    for item_data in items_data:
+        if not isinstance(item_data, dict):
+            return None, "Invalid line item"
+        desc = (item_data.get("description") or "").strip()
+        if not desc:
+            return None, "Each line item needs a description"
+        raw_amount = item_data.get("amount")
+        if raw_amount is None:
+            return None, "Each line item needs a valid amount"
+        try:
+            amount = float(raw_amount)
+        except (TypeError, ValueError):
+            return None, "Invalid amount on a line item"
+        parsed.append({"description": desc, "amount": amount})
+    return parsed, None
+
+
 def _client_json(client):
     return {
         "id": client.id,
@@ -608,13 +629,17 @@ def handle_invoice(invoice_id):
         invoice.vat_applies = vat_applies
         invoice.vat_rate_percent = vat_rate if vat_applies else None
 
+        parsed_items, items_err = _parse_line_items(data.get("items"))
+        if items_err:
+            return jsonify({"error": items_err}), 400
+
         InvoiceItem.query.filter_by(invoice_id=invoice.id).delete()
 
         items_buffer = []
-        for item_data in data.get("items", []):
+        for item_data in parsed_items:
             item = InvoiceItem(
                 description=item_data["description"],
-                amount=float(item_data["amount"]),
+                amount=item_data["amount"],
                 invoice_id=invoice.id,
             )
             items_buffer.append(item)
@@ -626,7 +651,11 @@ def handle_invoice(invoice_id):
         vat_amt, gross = _vat_amount_and_total(net, vat_applies, vat_rate)
         invoice.vat_amount = vat_amt if vat_applies else 0.0
         invoice.total_amount = gross
-        db.session.commit()
+        try:
+            db.session.commit()
+        except Exception as e:
+            db.session.rollback()
+            return jsonify({"error": str(e)}), 500
         return jsonify({"message": "Invoice updated successfully"})
 
     InvoiceItem.query.filter_by(invoice_id=invoice.id).delete()
@@ -850,13 +879,17 @@ def handle_quote(quote_id):
         quote.vat_applies = vat_applies
         quote.vat_rate_percent = vat_rate if vat_applies else None
 
+        parsed_items, items_err = _parse_line_items(data.get("items"))
+        if items_err:
+            return jsonify({"error": items_err}), 400
+
         QuoteItem.query.filter_by(quote_id=quote.id).delete()
 
         items_buffer = []
-        for item_data in data.get("items", []):
+        for item_data in parsed_items:
             item = QuoteItem(
                 description=item_data["description"],
-                amount=float(item_data["amount"]),
+                amount=item_data["amount"],
                 quote_id=quote.id,
             )
             items_buffer.append(item)
@@ -868,7 +901,11 @@ def handle_quote(quote_id):
         vat_amt, gross = _vat_amount_and_total(net, vat_applies, vat_rate)
         quote.vat_amount = vat_amt if vat_applies else 0.0
         quote.total_amount = gross
-        db.session.commit()
+        try:
+            db.session.commit()
+        except Exception as e:
+            db.session.rollback()
+            return jsonify({"error": str(e)}), 500
         return jsonify({"message": "Quote updated successfully"})
 
     QuoteItem.query.filter_by(quote_id=quote.id).delete()

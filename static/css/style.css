@@ -188,17 +188,24 @@ body.app-body {
   width: var(--touch);
   height: var(--touch);
   border-radius: 999px;
-  border: 1px solid var(--border);
-  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  background: rgba(255, 255, 255, 0.1);
+  color: rgba(248, 250, 252, 0.92);
   display: inline-flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  transition: background 0.15s ease, transform 0.08s ease;
+  transition: background 0.15s ease, transform 0.08s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.btn-apple-icon i {
+  font-size: 15px;
 }
 
 .btn-apple-icon:hover {
-  background: rgba(255, 255, 255, 0.09);
+  background: rgba(255, 255, 255, 0.16);
+  border-color: rgba(16, 185, 129, 0.45);
+  color: #fff;
 }
 
 .btn-apple-icon:active {
@@ -206,18 +213,37 @@ body.app-body {
 }
 
 .btn-apple-icon.is-paid {
-  border-color: rgba(16, 185, 129, 0.45);
+  border-color: rgba(16, 185, 129, 0.55);
   color: var(--accent-hover);
+  background: rgba(16, 185, 129, 0.12);
 }
 
 .btn-apple-icon.is-unpaid {
-  border-color: rgba(251, 191, 36, 0.35);
-  color: rgba(251, 191, 36, 0.95);
+  border-color: rgba(251, 191, 36, 0.45);
+  color: rgba(251, 191, 36, 0.98);
+  background: rgba(251, 191, 36, 0.1);
+}
+
+.btn-apple-icon.is-danger {
+  color: rgba(251, 113, 133, 0.95);
+  border-color: rgba(251, 113, 133, 0.4);
 }
 
 .btn-apple-icon.is-danger:hover {
-  border-color: rgba(251, 113, 133, 0.5);
-  color: var(--danger);
+  border-color: rgba(251, 113, 133, 0.65);
+  color: #fff;
+  background: rgba(251, 113, 133, 0.18);
+}
+
+.btn-apple-icon.is-convert {
+  color: rgba(96, 165, 250, 0.98);
+  border-color: rgba(96, 165, 250, 0.4);
+}
+
+.btn-apple-icon.is-convert:hover {
+  color: #fff;
+  background: rgba(96, 165, 250, 0.18);
+  border-color: rgba(96, 165, 250, 0.6);
 }
 
 /* Invoice list */
@@ -307,14 +333,18 @@ body.app-body {
   width: 44px;
   height: 44px;
   border-radius: 12px;
-  border: 1px solid var(--border);
-  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(251, 113, 133, 0.35);
+  background: rgba(251, 113, 133, 0.1);
+  color: rgba(251, 113, 133, 0.95);
+  font-size: 20px;
+  line-height: 1;
   cursor: pointer;
 }
 
 .btn-remove-line:hover {
-  background: rgba(251, 113, 133, 0.12);
-  border-color: rgba(251, 113, 133, 0.35);
+  background: rgba(251, 113, 133, 0.2);
+  border-color: rgba(251, 113, 133, 0.55);
+  color: #fff;
 }
 
 /* Forms + modals */

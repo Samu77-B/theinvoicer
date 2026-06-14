@@ -80,6 +80,51 @@ function escapeHtml(text) {
   return d.innerHTML;
 }
 
+function removeLineItemRow(btn) {
+  const row = btn.closest('.line-item-row');
+  const container = row?.parentElement;
+  if (!row || !container) return;
+  if (container.querySelectorAll('.line-item-row').length <= 1) {
+    showError('At least one line item is required');
+    return;
+  }
+  row.remove();
+}
+
+function collectLineItems(containerId) {
+  const container = document.getElementById(containerId);
+  if (!container) {
+    return { error: 'Line items not found' };
+  }
+
+  const descriptions = Array.from(container.querySelectorAll('input[name="description[]"]')).map(
+    (input) => input.value.trim()
+  );
+  const amounts = Array.from(container.querySelectorAll('input[name="amount[]"]')).map((input) =>
+    parseFloat(input.value)
+  );
+
+  if (descriptions.length === 0) {
+    return { error: 'Please add at least one line item' };
+  }
+
+  for (let i = 0; i < descriptions.length; i += 1) {
+    if (!descriptions[i]) {
+      return { error: 'Each line item needs a description' };
+    }
+    if (Number.isNaN(amounts[i])) {
+      return { error: 'Please enter a valid amount for each line' };
+    }
+  }
+
+  return {
+    items: descriptions.map((description, index) => ({
+      description,
+      amount: amounts[index],
+    })),
+  };
+}
+
 function formatUkDate(isoYmd) {
   if (!isoYmd) return '';
   const p = isoYmd.split('-');
@@ -315,7 +360,7 @@ function addInvoiceItem() {
           <input type="number" step="0.01" class="form-control" name="amount[]" placeholder="0.00" required>
         </div>
         <div class="line-item-rm">
-          <button type="button" class="btn-remove-line" aria-label="Remove line" onclick="this.parentElement.parentElement.remove()">×</button>
+          <button type="button" class="btn-remove-line" aria-label="Remove line" onclick="removeLineItemRow(this)">×</button>
         </div>
     `;
   container.appendChild(newItem);
@@ -555,7 +600,7 @@ function addEditInvoiceItem(item = null) {
           <input type="number" step="0.01" class="form-control" name="amount[]" placeholder="0.00" required>
         </div>
         <div class="line-item-rm">
-          <button type="button" class="btn-remove-line" aria-label="Remove line" onclick="this.parentElement.parentElement.remove()">×</button>
+          <button type="button" class="btn-remove-line" aria-label="Remove line" onclick="removeLineItemRow(this)">×</button>
         </div>
     `;
   const descInput = newItem.querySelector('input[name="description[]"]');
@@ -572,13 +617,11 @@ async function updateInvoice() {
     const form = document.getElementById('editInvoiceForm');
     const invoiceId = form.querySelector('input[name="invoice_id"]').value;
     const invoiceNumber = (form.querySelector('input[name="invoice_number"]').value || '').trim();
-    const descriptions = Array.from(form.querySelectorAll('#editInvoiceItems input[name="description[]"]')).map((input) => input.value);
-    const amounts = Array.from(form.querySelectorAll('#editInvoiceItems input[name="amount[]"]')).map((input) => parseFloat(input.value));
-
-    const items = descriptions.map((description, index) => ({
-      description,
-      amount: amounts[index],
-    }));
+    const lineItems = collectLineItems('editInvoiceItems');
+    if (lineItems.error) {
+      showError(lineItems.error);
+      return;
+    }
 
     const vatApplies = document.getElementById('editInvoiceVatApplies')?.checked || false;
     const vatRateRaw = document.getElementById('editInvoiceVatRate')?.value;
@@ -592,7 +635,7 @@ async function updateInvoice() {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        items,
+        items: lineItems.items,
         invoice_number: invoiceNumber,
         vat_applies: vatApplies,
         vat_rate_percent: vatRatePercent,
@@ -608,7 +651,7 @@ async function updateInvoice() {
     bootstrap.Modal.getInstance(document.getElementById('editInvoiceModal')).hide();
     loadInvoices();
   } catch (error) {
-    showError('Failed to update invoice: ' + error.message);
+    showError(error.message || 'Failed to update invoice');
   }
 }
 
@@ -807,7 +850,7 @@ function addQuoteItem() {
           <input type="number" step="0.01" class="form-control" name="amount[]" placeholder="0.00" required>
         </div>
         <div class="line-item-rm">
-          <button type="button" class="btn-remove-line" aria-label="Remove line" onclick="this.parentElement.parentElement.remove()">×</button>
+          <button type="button" class="btn-remove-line" aria-label="Remove line" onclick="removeLineItemRow(this)">×</button>
         </div>
     `;
   container.appendChild(newItem);
@@ -1035,7 +1078,7 @@ function addEditQuoteItem(item = null) {
           <input type="number" step="0.01" class="form-control" name="amount[]" placeholder="0.00" required>
         </div>
         <div class="line-item-rm">
-          <button type="button" class="btn-remove-line" aria-label="Remove line" onclick="this.parentElement.parentElement.remove()">×</button>
+          <button type="button" class="btn-remove-line" aria-label="Remove line" onclick="removeLineItemRow(this)">×</button>
         </div>
     `;
   const descInput = newItem.querySelector('input[name="description[]"]');
@@ -1052,13 +1095,11 @@ async function updateQuote() {
     const form = document.getElementById('editQuoteForm');
     const quoteId = form.querySelector('input[name="quote_id"]').value;
     const quoteNumber = (form.querySelector('input[name="quote_number"]').value || '').trim();
-    const descriptions = Array.from(form.querySelectorAll('#editQuoteItems input[name="description[]"]')).map((input) => input.value);
-    const amounts = Array.from(form.querySelectorAll('#editQuoteItems input[name="amount[]"]')).map((input) => parseFloat(input.value));
-
-    const items = descriptions.map((description, index) => ({
-      description,
-      amount: amounts[index],
-    }));
+    const lineItems = collectLineItems('editQuoteItems');
+    if (lineItems.error) {
+      showError(lineItems.error);
+      return;
+    }
 
     const vatApplies = document.getElementById('editQuoteVatApplies')?.checked || false;
     const vatRateRaw = document.getElementById('editQuoteVatRate')?.value;
@@ -1072,7 +1113,7 @@ async function updateQuote() {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        items,
+        items: lineItems.items,
         quote_number: quoteNumber,
         vat_applies: vatApplies,
         vat_rate_percent: vatRatePercent,
@@ -1088,7 +1129,7 @@ async function updateQuote() {
     bootstrap.Modal.getInstance(document.getElementById('editQuoteModal')).hide();
     loadQuotes();
   } catch (error) {
-    showError('Failed to update quote: ' + error.message);
+    showError(error.message || 'Failed to update quote');
   }
 }
 
@@ -1204,7 +1245,7 @@ async function loadQuotes() {
                     <button type="button" class="btn-apple-icon" title="Duplicate" aria-label="Duplicate" onclick="duplicateQuote(${quote.id})">
                         <i class="fas fa-copy"></i>
                     </button>
-                    <button type="button" class="btn-apple-icon" title="Convert to invoice" aria-label="Convert to invoice" onclick="convertQuoteToInvoice(${quote.id})">
+                    <button type="button" class="btn-apple-icon is-convert" title="Convert to invoice" aria-label="Convert to invoice" onclick="convertQuoteToInvoice(${quote.id})">
                         <i class="fas fa-file-invoice"></i>
                     </button>
                     <button type="button" class="btn-apple-icon is-danger" title="Delete" aria-label="Delete" onclick="deleteQuote(${quote.id})">
